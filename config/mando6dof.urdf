@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="utf-8"?>        <!-- GENERAT AUTOMÀTICAMENT AMB SOLIDWORKS -->
+<robot name="mando6dof">  
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/base_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <link name="part2">
+    <inertial>
+      <origin xyz="0.000211555333141503 0.095209895126307 0.0697847466660272" rpy="0 0 0" />
+      <mass value="2.04048569141785" />
+      <inertia ixx="0.00363755179279549" ixy="1.14656318256036E-08" ixz="-8.19764416081096E-09" iyy="0.00290948104388007" iyz="-1.09589741694387E-08" izz="0.00133028153957946" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part2.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j1" type="prismatic">
+    <origin xyz="0 0.19 0.0275" rpy="0 0 3.1416" />
+    <parent link="base_link" />
+    <child link="part2" />
+    <axis xyz="0 0 1" />
+    <limit lower="-0.0175" upper="0.0175" effort="100" velocity="3" />
+  </joint>
+  
+  <link name="part3">
+    <inertial>
+      <origin xyz="0.000135292413790358 0.095546837132154 0.0159515629442881" rpy="0 0 0" />
+      <mass value="0.381868413230614" />
+      <inertia ixx="0.00101042836723973" ixy="-1.00552364730264E-05" ixz="3.01640449501536E-06" iyy="0.000436500607840934" iyz="3.68553377600405E-06" izz="0.00136980300897012" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part3.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j2" type="prismatic">
+    <origin xyz="0.17 0.19 0.0275" rpy="0 0 3.1416" />
+    <parent link="base_link" />
+    <child link="part3" />
+    <axis xyz="0 0 1" />
+    <limit lower="-0.0175" upper="0.0175" effort="100" velocity="3" />
+    <mimic joint="j1" multiplier="-1" />
+  </joint>
+  
+  <link name="part4">
+    <inertial>
+      <origin xyz="0.00661877439235189 0.0428655450255509 0.0422430455508019" rpy="0 0 0" />
+      <mass value="1.12497715384726" />
+      <inertia ixx="0.000871793257523051" ixy="3.27027500484445E-06" ixz="-1.13418601441967E-05" iyy="0.00096682344576199" iyz="-1.2664393557404E-07" izz="0.00141482243616791" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part4.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j3" type="prismatic">
+    <origin xyz="0 0.0525 0.023" rpy="0 0 0" />
+    <parent link="part3" />
+    <child link="part4" />
+    <axis xyz="-1 0 0" />
+    <limit lower="-0.0276" upper="0.0276" effort="100" velocity="3" />
+  </joint>
+  
+  <link name="part5">
+    <inertial>
+      <origin xyz="-0.000163594299378551 0.0581260649073952 0.0466086368334876" rpy="0 0 0" />
+      <mass value="0.607645571100315" />
+      <inertia ixx="0.000416418543057764" ixy="-2.55014096885044E-08" ixz="-1.52733119206932E-06" iyy="0.000189078731205113" iyz="2.32214849009674E-07" izz="0.000460925468431574" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part5.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j4" type="prismatic">
+    <origin xyz="-0.058 0.0425 0.075" rpy="0 0 -1.5708" />
+    <parent link="part4" />
+    <child link="part5" />
+    <axis xyz="1 0 0" />
+    <limit lower="-0.0276" upper="0.0276" effort="100" velocity="3" />
+  </joint>
+  
+  <link name="part6">
+    <inertial>
+      <origin xyz="0.000265062369918981 0.0496030896937153 0.0460916214976215" rpy="0 0 0" />
+      <mass value="0.42731034318776" />
+      <inertia ixx="0.000200296227604456" ixy="-1.32722032147083E-06" ixz="1.000101157774E-06" iyy="9.99515229399172E-05" iyz="7.98474122405562E-07" izz="0.00018185439452236" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part6.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part6.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j5" type="revolute">
+    <origin xyz="0 0.058 0.0775" rpy="0 0 0" />
+    <parent link="part5" />
+    <child link="part6" />
+    <axis xyz="0 0 1" />
+    <limit lower="-3.1416" upper="3.1416" effort="100" velocity="3" />
+  </joint>
+  
+  <link name="part7">
+    <inertial>
+      <origin xyz="0.0347789711033947 3.08996561670938E-09 -0.00144125461399214" rpy="0 0 0" />
+      <mass value="0.769163276116825" />
+      <inertia ixx="0.000184841374085253" ixy="4.96315175269665E-07" ixz="2.45350981358203E-07" iyy="0.000166143552825002" iyz="-1.7609023501569E-06" izz="0.000200781144593822" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part7.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/part7.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j6" type="revolute">
+    <origin xyz="0 -0.035 0.053" rpy="0 -0.012108 1.5708" />
+    <parent link="part6" />
+    <child link="part7" />
+    <axis xyz="0.99993 0 -0.012108" />
+    <limit lower="-3.1416" upper="3.1416" effort="100" velocity="3" />
+  </joint>
+  
+  <link name="mando">
+    <inertial>
+      <origin xyz="4.03448533612994E-05 -0.000742651534861499 0.0125647675154243" rpy="0 0 0" />
+      <mass value="0.0541674165260093" />
+      <inertia ixx="3.25964354682957E-05" ixy="-1.23845694932971E-08" ixz="2.09468685431252E-07" iyy="3.15424407438852E-05" iyz="1.36656979844455E-06" izz="8.50253584997852E-06" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/mando.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.752941176470588 0.752941176470588 0.752941176470588 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="mando_meshes/mando.STL" />
+      </geometry>
+    </collision>
+  </link>
+  
+  <joint name="j7" type="revolute">
+    <origin xyz="0.035 0 -0.00094653" rpy="-0.059037 -0.012108 3.1416" />
+    <parent link="part7" />
+    <child link="mando" />
+    <axis xyz="0 0.99826 0.059003" />
+    <limit lower="-3.1416" upper="3.1416" effort="100" velocity="3" />
+  </joint>
+
+  <ros2_control name="FakeSystem" type="system">
+    <hardware>
+      <plugin>mock_components/GenericSystem</plugin>
+    </hardware>
+    <joint name="j1">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="j2">
+      <param name="mimic">j1</param>
+      <param name="multiplier">-1.0</param>
+      <state_interface name="position"/>
+    </joint>
+    <joint name="j3">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="j4">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="j5">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="j6">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+    <joint name="j7">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">0.0</param>
+      </state_interface>
+    </joint>
+  </ros2_control>
+
+</robot>

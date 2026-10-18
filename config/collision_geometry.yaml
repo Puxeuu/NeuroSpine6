@@ -1,0 +1,170 @@
+#  Tipus:
+#    cylinder = cilindre pla (tapes planes)
+#    box      = caixa orientada
+#    sphere   = esfera
+
+primitives:
+
+#  BASE_LINK
+
+# 2000 x 2000 x 10 mm. La col·loquem centrada a l'origen, amb la
+# superficie superior a Z=0. Aixi qualsevol link amb Z<0 col·lisiona
+# amb la taula. El robot esta al damunt.
+- link: base_link
+  type: box
+  center: [0.0, 0.0, -0.005]
+  size: [2.0, 2.0, 0.01]
+  rpy: [0.0, 0.0, 0.0]
+
+# DISC BASE del robot (sobre la taula)
+- link: base_link
+  type: cylinder
+  p0: [0.0, 0.0, 0.0]
+  p1: [0.0, 0.0, 0.0098]
+  radius: 0.0333
+
+
+#  ARM1
+
+- link: arm1
+  type: cylinder
+  p0: [0.0, 0.0, 0.001]
+  p1: [0.0, 0.0, 0.136]
+  radius: 0.0335
+
+- link: arm1
+  type: cylinder
+  p0: [0.0, 0, 0.1039]
+  p1: [0.0, 0.03418, 0.1039]
+  radius: 0.03138
+
+- link: arm1
+  type: cylinder
+  p0: [0.0, -0.03, 0.1039]
+  p1: [0.0, 0.0, 0.1039]
+  radius: 0.026
+
+
+# ARM2
+
+- link: arm2
+  type: box
+  center: [0.0, 0.006, 0.06]
+  size: [0.05, 0.012, 0.120]
+
+- link: arm2
+  type: cylinder
+  p0: [0.0, 0.0, 0.0]
+  p1: [0.0, 0.012, 0.0]
+  radius: 0.025
+
+- link: arm2
+  type: cylinder
+  p0: [0.0, 0.0, 0.120]
+  p1: [0.0, 0.012, 0.120]
+  radius: 0.025
+
+
+# ARM3
+
+- link: arm3
+  type: cylinder
+  p0: [0.0, -0.001, 0.0]
+  p1: [0.0, -0.06775, 0.0]
+  radius: 0.0335
+
+- link: arm3
+  type: cylinder
+  p0: [-0.0265, -0.034375, 0.0537]
+  p1: [0.0265, -0.034375, 0.0537]
+  radius: 0.025
+
+
+# ARM4
+
+- link: arm4
+  type: cylinder
+  p0: [0.0, 0.0, 0.0]
+  p1: [0.045, 0.0, 0.0]
+  radius: 0.018
+
+- link: arm4
+  type: cylinder
+  p0: [0.045, -0.0265, 0.0]
+  p1: [0.045, 0.0265, 0.0]
+  radius: 0.025
+
+
+# ARM5
+
+- link: arm5
+  type: cylinder
+  p0: [0.0, 0.0, 0.0]
+  p1: [0.0, 0.012, 0.0]
+  radius: 0.0165
+
+- link: arm5
+  type: box
+  center: [0.015895, 0.006, 0.0]
+  size: [0.03179, 0.012, 0.033]
+
+- link: arm5
+  type: box
+  center: [0.05911, 0.00108, 0.0]
+  size: [0.05759, 0.012, 0.033]
+  rpy: [0.0, 0.0, -0.1745]
+
+- link: arm5
+  type: box
+  center: [0.08365, -0.00400, 0.0]
+  size: [0.00972, 0.012, 0.033]
+
+- link: arm5
+  type: box
+  center: [0.051899, -0.000530, 0.0]
+  size: [0.05, 0.010, 0.033]
+  rpy: [0.0, 0.0, -0.2182]
+
+- link: arm5
+  type: cylinder
+  p0: [0.0885, -0.0265, 0.0]
+  p1: [0.0545, -0.0265, 0.0]
+  radius: 0.025
+
+- link: arm5
+  type: cylinder
+  p0: [0.0545, -0.0265, 0.0]
+  p1: [0.0355, -0.0265, 0.0]
+  radius: 0.02
+
+
+# ARM6
+
+- link: capcal
+  type: cylinder
+  p0: [0.0, 0.0, 0.0]
+  p1: [0.0109, 0.0, 0.0]
+  radius: 0.01725
+
+- link: capcal
+  type: cylinder
+  p0: [0.0109, 0.0, 0.0]
+  p1: [0.0179, 0.0, 0.0]
+  radius: 0.0095
+
+- link: capcal
+  type: cylinder
+  p0: [0.0179, 0.0, 0.0]
+  p1: [0.0204, 0.0, 0.0]
+  radius: 0.006
+
+- link: capcal
+  type: cylinder
+  p0: [0.0204, 0.0, 0.0]
+  p1: [0.0424, 0.0, 0.0]
+  radius: 0.0025
+
+- link: capcal
+  type: sphere
+  center: [0.0424, 0.0, 0.0]
+  radius: 0.005

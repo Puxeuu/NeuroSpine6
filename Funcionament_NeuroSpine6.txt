@@ -1,0 +1,1230 @@
+
+
+MOLT I MOLT IMPORTANT SIUSPLAU, TEMA ETHERNET: 
+
+     Mac (app NeuroSpine6)
+          │
+          │  Dues rutes possibles, l'app tria sola la més ràpida:
+          │   • Cable Ethernet directe → 10.42.0.2 (3 ms, el preferit)
+          │   • WiFi → 192.168.1.140 (fallback automàtic)
+          │
+     Ventuno Q (Ubuntu Linux)
+          │
+          │  Dins hi corre el "motor_daemon" que arrenca sol en engegar
+          │  (gestionat per systemd). Rep les ordres per TCP del Mac
+          │  i les tradueix a trames per al convertidor.
+          │
+          │  USB
+          │
+     Convertidor TA_CAN
+          │  CAN bus
+     6 motors SitoDrive
+
+
+
+
+
+
+
+
+
+
+################################################################################
+#                                                                              #
+#   MANUAL DEL PROJECTE NEUROSPINE6                                            #
+#   Guia completa de funcionament, línia per línia                             #
+#                                                                              #
+################################################################################
+
+Aquest document explica TOT el que passa al programa, des que escrius
+`python neurospine.py` fins que tanques la finestra. Per cada acció expliquem:
+
+    · Quin fitxer s'executa
+    · Quines funcions es criden i en quin ordre
+    · Què fa cada línia significativa
+    · Quins fitxers de configuració llegeix
+    · Quins threads / timers / subprocessos arrenca
+    · Com es comunica amb els altres mòduls
+
+L'objectiu és que puguis obrir aquest document i qualsevol fitxer del projecte
+en paral·lel, i no et perdis mai: a cada punt sabràs ON ETS i QUÈ VA DESPRÉS.
+
+
+
+
+################################################################################
+#   PART 0 - CONCEPTES PREVIS QUE SURTEN A TOT ARREU                           #
+################################################################################
+
+Abans de començar, aquests 7 conceptes són el "diccionari" del projecte.
+Els fas servir constantment.
+
+
+0.1  URDF
+     Un fitxer XML que descriu un robot: quins links té, com estan connectats,
+     quin joint els uneix (revolute, prismatic...), on està l'origen de cada
+     link respecte el pare, i quin STL els representa visualment.
+     - config/cobot.urdf        → el nostre braç
+     - config/mando6dof.urdf    → el controlador (mando) també és un "robot"
+
+0.2  q (minúscula)
+     Vector de 6 valors en RADIANS, un per joint. És l'estat complet del braç.
+     q = [q1, q2, q3, q4, q5, q6]
+     Si saps q, pots dibuixar el robot sencer (via FK).
+
+0.3  Pose / T
+     Matriu homogènia 4x4 que descriu posició + orientació d'un link.
+     T = [[R, p], [0,0,0,1]] on R és rotació 3x3 i p és translació 3x1.
+     "pose del TCP" = T del link final (la punta de la broca).
+
+0.4  TCP (Tool Center Point)
+     L'extrem útil del robot. En aquest projecte és el "capcal" muntat al final
+     (bola, punxó o broca). És el punt que ha d'arribar al cargol.
+
+0.5  FK (Forward Kinematics) / IK (Inverse Kinematics)
+     FK: q → poses de tots els links. Trivial, és només multiplicar matrius.
+     IK: pose desitjada → q. Difícil (hi pot haver 0, 1 o infinites solucions).
+     Resolem IK amb DLS (Damped Least Squares) per no explotar prop de
+     singularitats.
+
+0.6  Qt (via QtPy / PyQt5)
+     La llibreria C++ per fer finestres. Qt funciona amb:
+       - QApplication    el motor
+       - QMainWindow     la finestra principal
+       - QWidget         qualsevol component (botó, etiqueta, grup...)
+       - QTimer          temporitzador amb callbacks
+       - Signal/Slot     mecanisme d'events (semblant a callbacks)
+     Els workspaces i panells són QWidgets dins una QMainWindow.
+
+0.7  Signal/Slot
+     Un objecte Qt pot "emetre un senyal" (ex: botó clicat). Un altre objecte
+     pot "connectar-se" a aquest senyal amb una funció (slot). Quan s'emet,
+     Qt crida totes les funcions connectades.
+     Exemple: `self.sidebar.workspaceRequested.connect(self._switch_workspace)`
+
+
+
+
+################################################################################
+#   PART 1 - ESTRUCTURA DEL PROJECTE                                           #
+################################################################################
+
+NeuroSpine6/
+│
+├── neurospine.py                          Entrada principal (el que executes)
+│
+├── Funcionament_NeuroSpine6.txt           Aquest document
+│
+├── config/                                FITXERS ESTÀTICS (no es toquen en runtime)
+│   ├── cobot.urdf                         Model cinemàtic/visual del braç (6 DOF)
+│   ├── mando6dof.urdf                     Model del controlador (6 DOF també)
+│   ├── collision_geometry.yaml            Primitives de col·lisió (cilindres/caixes) per link
+│   ├── motor_config.yaml                  6 motors reals: id, reducció, offset, direcció
+│   ├── dynamic_params.yaml                Masses, inèrcies, kt, fricció (per handguide)
+│   ├── capcals.yaml                       Capcals disponibles (bola/punxó/broca) i offsets
+│   ├── meshes/                            STLs del braç (arm1..5, base_link, capcals)
+│   └── mando_meshes/                      STLs del mando
+│
+├── data/                                  PACIENTS
+│   └── pacients/839201/                   Un pacient d'exemple
+│        ├── escoliosis.nrrd               TAC (volum 3D del pacient)
+│        ├── medula_rectificada.stl        Medul·la en 3D
+│        ├── vertebres_meshes/             Vèrtebres segmentades (per planificació)
+│        ├── cargols.json                  (es crea al planificar) cargols i vectors
+│        ├── fiducials.json                (es crea al registrar) punts T₁..Tₙ i R₁..Rₙ
+│        └── T_registre.npy                (es crea al registrar) matriu 4x4 TAC→Robot
+│
+├── src/                                   LÒGICA PURA (sense Qt, sense UI)
+│   │
+│   ├── math/
+│   │   └── transforms.py                  Rx, Ry, Rz, make_T (rotacions bàsiques)
+│   │
+│   ├── model/
+│   │   ├── urdf_loader.py                 Llegeix URDF → objectes Robot/Link/Joint
+│   │   └── capcal_manager.py              Canvi actiu de capcal (bola/punxó/broca)
+│   │
+│   ├── kinematics/
+│   │   ├── forward.py                     FK: q → poses dels links
+│   │   ├── jacobian.py                    Jacobià numèric 6×6
+│   │   └── manipulability.py              Yoshikawa + damping adaptatiu
+│   │
+│   ├── control/
+│   │   ├── pose_error.py                  Error 6D entre dues poses (3 pos + 3 ori)
+│   │   └── dls_solver.py                  Inverteix Jacobià amb damping (λ)
+│   │
+│   ├── collision/
+│   │   ├── collision_loader.py            Llegeix collision_geometry.yaml
+│   │   └── checker.py                     Detecció de col·lisions amb FCL
+│   │
+│   ├── dynamics/
+│   │   ├── dynamic_loader.py              Llegeix dynamic_params.yaml
+│   │   ├── motor_model.py                 N·m → mA (per handguide)
+│   │   └── newton_euler.py                Parells per gravetat (τ = M·g per joint)
+│   │
+│   └── hardware/
+│       ├── motor_config.py                Llegeix motor_config.yaml
+│       ├── motor_converter.py             rad ↔ counts d'encoder
+│       ├── sitodrive.py                   Protocol SitoDrive + MotorBus
+│       ├── _daemon.py                     Subprocés que parla amb els motors: per TCP amb
+│       │                                  el Ventuno Q (tcp://192.168.1.140:5000) o per
+│       │                                  port sèrie local. Vegeu ventuno/README.md
+│       ├── motor_controller.py            Wrapper d'alt nivell (rad) sobre MotorBus
+│       └── handguide_controller.py        Mode handguide (CURRENT_MODE)
+│
+└── scripts/                               APLICACIÓ (UI + control)
+    │
+    ├── viewer_cobot.py                    EL VISUALITZADOR 3D + bucle 100 Hz
+    ├── viewer_capcals_patch.py            Afegit per canviar de capcal en calent
+    │
+    └── neurospine_app/                    LA APP MODULAR
+        │
+        ├── main_window.py                 Finestra principal (sidebar + stack)
+        ├── header.py                      Barra superior (títol + E-STOP)
+        ├── sidebar.py                     Navegació lateral entre workspaces
+        ├── theme.py                       Colors, fonts, mides globals
+        ├── preferences.py                 Llegeix/escriu preferences.json
+        ├── mando_service.py               Thread que llegeix el mando (compartit)
+        │
+        ├── modes/
+        │   ├── modes_config.py            Definició dels 5 modes (nom, color, icona)
+        │   ├── j6_drill.py                Broca del J6 en IK5 (start/stop/emergència)
+        │   ├── mode_selector.py           Widget selector amb 5 botons
+        │   └── coordinator.py             LES TRANSICIONS entre modes (crític)
+        │
+        ├── panels/
+        │   ├── action_bar.py              Botons [Connect] [Mirror] [Home] [STOP] [...]
+        │   ├── context_panel.py           Columna dreta (canvia segons mode)
+        │   ├── currents_panel.py          Gràfic en temps real del corrent dels 6 motors
+        │   │                              (botó "Intensitats" o tecla I; només llegeix el bus)
+        │   └── screw_panel.py             Llista de cargols planificats
+        │
+        ├── workspaces/
+        │   ├── robot.py                   Pantalla ROBOT (embolcalla ViewerDLSPro)
+        │   ├── j6_control.py              Panell TORQUE del J6
+        │   ├── planning.py                Workspace PLANIFICACIÓ (shell)
+        │   ├── planning_widget.py         El widget pesat de planificació
+        │   ├── registration.py            Workspace REGISTRE (TAC ↔ Robot)
+        │   └── navigation.py              Workspace NAVEGACIÓ quirúrgica
+        │
+        └── registration/
+            ├── kabsch.py                  Algorisme Kabsch (alineació de punts)
+            └── state.py                   Estat persistent del registre
+
+
+
+
+################################################################################
+#   PART 2 - FASE 1: ARRENCAR L'APLICACIÓ                                      #
+################################################################################
+
+─────────────────────────────────────────────────
+2.1  neurospine.py (fitxer d'entrada)
+─────────────────────────────────────────────────
+
+Línia 1-2:  import os, sys
+            Carreguem els mòduls estàndard de Python.
+
+Línia 4:    _ROOT = os.path.dirname(os.path.abspath(__file__))
+            Guarda la carpeta on està aquest fitxer.
+            __file__ = "C:/.../NeuroSpine6/neurospine.py"
+            abspath  → ruta absoluta
+            dirname  → només la carpeta → "C:/.../NeuroSpine6"
+
+Línia 5-6:  if _ROOT not in sys.path: sys.path.insert(0, _ROOT)
+            Afegeix la carpeta al llistat de "on buscar imports".
+            Això permet escriure `from src.model.urdf_loader import load_urdf`
+            des de qualsevol lloc.
+
+Línia 8-10: Mateix amb _SCRIPTS = _ROOT/scripts, per poder escriure
+            `from neurospine_app.main_window import ...` sense prefix "scripts.".
+
+Línia 13:   def main(): ...
+            Definim la funció principal.
+
+Línia 14:   from qtpy import QtWidgets
+            IMPORT DIFERIT. QtPy és el pont que ens connecta amb Qt (C++).
+            El fem aquí dins (no a dalt) perquè sys.path ja estigui modificat.
+
+Línia 15:   from neurospine_app.main_window import NeuroSpineMainWindow
+            Importem la classe de la finestra principal.
+            Això executa l'`__init__.py` del paquet neurospine_app, que al
+            seu torn fa imports de theme, header, sidebar, etc.
+            (Vegeu secció 2.2.)
+
+Línia 17:   app = QtWidgets.QApplication(sys.argv)
+            Creem l'app Qt. sys.argv permet passar flags com `-style xxx`.
+
+Línia 18:   app.setStyle("Fusion")
+            Fusion és un estil neutre que queda igual a Windows i Mac.
+
+Línia 20:   win = NeuroSpineMainWindow()
+            AQUÍ passa gairebé TOT. Es construeix la finestra, es llegeixen
+            preferències, es connecta al mando, es crea el primer workspace.
+            (Vegeu secció 2.3.)
+
+Línia 21:   win.show()
+            Fa visible la finestra.
+
+Línia 23:   sys.exit(app.exec_())
+            BUCLE INFINIT de Qt. Qt es queda aquí dintre:
+              - mirant si hi ha events de ratolí/teclat
+              - cridant els slots connectats
+              - fent timeout dels QTimer actius
+              - repintant els widgets quan cal
+
+            Només surt d'aquest bucle quan l'usuari tanca l'última finestra
+            o algú crida `app.quit()`. Llavors `sys.exit` tanca el procés.
+
+Línia 26:   if __name__ == "__main__": main()
+            Si has executat el fitxer directament, crida main(). Si l'has
+            importat des d'un altre lloc (`import neurospine`), NO corre.
+
+
+─────────────────────────────────────────────────
+2.2  Imports encadenats (abans de crear la finestra)
+─────────────────────────────────────────────────
+
+Només de fer `from neurospine_app.main_window import NeuroSpineMainWindow`,
+Python executa els imports top-level de main_window.py:
+
+    from qtpy import QtWidgets, QtCore
+    from .theme import ...          → carrega theme.py (colors, estils)
+    from .header import Header      → carrega header.py (crea classe Header)
+    from .sidebar import Sidebar    → carrega sidebar.py (crea classe Sidebar)
+    from .mando_service import get_mando_service   → carrega mando_service.py
+                                        (defineix classe MandoService + singleton)
+    from .preferences import load_preferences, PreferencesDialog
+                                        → carrega preferences.py
+
+Cap d'aquests imports fa feina pesada: només DEFINEIXEN classes. La feina
+real es fa al `NeuroSpineMainWindow.__init__()`.
+
+
+─────────────────────────────────────────────────
+2.3  NeuroSpineMainWindow.__init__()  (main_window.py:37-102)
+─────────────────────────────────────────────────
+
+Ara repassem línia per línia la finestra principal.
+
+L.38  super().__init__()
+      Inicialitza la part Qt de la QMainWindow.
+
+L.39  self.setWindowTitle("NeuroSpine Navigator")
+L.40  self.showMaximized()
+L.41  self.setStyleSheet(global_stylesheet())
+      Pintat global: ve de theme.py.
+
+L.44  self.prefs = load_preferences()
+      Obre preferences.json (si existeix) i retorna un dict:
+        {"pacient_id": "839201", "mando_port": "COM4", "mando_baudrate": 115200, ...}
+      Fitxer: scripts/neurospine_app/preferences.py
+
+L.47-50  self._pacient_dir = ...data/pacients/<id>
+      Guarda la ruta de la carpeta del pacient actiu. Serveix per al workspace
+      de registre (buscar fiducials.json, T_registre.npy, etc.).
+
+L.54-57  self.mando_service = get_mando_service(port="COM4", baud=115200)
+      Crea (o retorna si ja existeix) el singleton MandoService.
+      El servei NO està corrent encara, només creat.
+
+L.58  self.mando_service.connection_ok.connect(self._on_mando_status)
+      Signal: cada cop que canviï l'estat de connexió del mando, actualitzem
+      l'indicador del header.
+
+L.61-66  Creació del "central widget" i layout vertical (header dalt + body).
+
+L.68-70  Header
+      self.header = Header()               ← widget barra superior
+      self.header.emergencyStop.connect(self._on_estop)
+         → Signal: quan es clica E-STOP, cridem _on_estop (secció 7)
+
+L.73-85  Body: HBoxLayout amb sidebar + stack
+      self.sidebar = Sidebar()                 ← widget barra lateral
+      self.sidebar.workspaceRequested.connect(self._switch_workspace)
+      self.sidebar.settingsRequested.connect(self._open_settings)
+      self.stack = QtWidgets.QStackedWidget()  ← contenidor que mostra UN
+                                                 workspace a la vegada
+
+L.90  self._workspaces = {}
+      Dict buit: {"robot": <RobotWorkspace>, "planning": <...>, ...}
+      Els creem SOTA DEMANDA (lazy loading) perquè arrencar sigui ràpid.
+
+L.93  self.mando_service.start()
+      Ara sí, arrenca el thread de lectura del mando:
+         · Prova d'obrir COM4 @ 115200
+         · Si ho aconsegueix: emit connection_ok(True), inicia QTimer de 50 ms
+         · Si falla: emit connection_ok(False), queda silenciós en "simulació"
+
+L.96  self._switch_workspace("robot")
+      Carreguem el workspace ROBOT per defecte. AQUÍ es construeix tot el
+      visualitzador 3D, els sliders, el bucle 100 Hz, etc. (secció 3)
+
+L.99-102  Timer de refresc dels indicadors d'estat del header
+      Cada 1000 ms crida _refresh_status_indicators(), que mira:
+         · mando connectat? → header.set_mando_status
+         · robot connectat? → header.set_robot_status
+         · existeix T_registre.npy? → header.set_registration_status
+
+
+
+
+################################################################################
+#   PART 3 - CARREGANT EL WORKSPACE "ROBOT" (el gran)                          #
+################################################################################
+
+El RobotWorkspace és el workspace més important: és on controles el braç.
+Dintre d'ell viu el ViewerDLSPro, que és el que té el 3D i el bucle 100 Hz.
+
+
+─────────────────────────────────────────────────
+3.1  _switch_workspace("robot")  (main_window.py:107-118)
+─────────────────────────────────────────────────
+
+L.108  if "robot" not in self._workspaces:
+       Encara no està creat.
+
+L.109  self._workspaces["robot"] = self._create_workspace("robot")
+       Crea el workspace. Mentre es crea, es mostra una pantalla de "Carregant"
+       (fons negre amb un "◈" al centre).
+
+L.111  self.stack.addWidget(self._workspaces["robot"])
+       Afegeix el workspace al QStackedWidget.
+
+L.113-115  self.stack.setCurrentWidget(w)
+       Fa que sigui el visible.
+
+L.117-118  Actualitza títol del header i marca "ROBOT" com actiu al sidebar.
+
+
+─────────────────────────────────────────────────
+3.2  _create_workspace("robot")  (main_window.py:120-157)
+─────────────────────────────────────────────────
+
+L.122-125  Mostra loading screen (pantalla intermèdia).
+
+L.131-133  from .workspaces.robot import RobotWorkspace
+           w = RobotWorkspace()
+           AQUÍ passa el gros. RobotWorkspace.__init__ fa:
+              1. Import diferit de scripts.viewer_cobot
+              2. Instancia ViewerDLSPro() (secció 3.3)
+              3. Amaga els widgets vells del viewer (coordinator.hide_redundant_widgets)
+              4. Afegeix els overlays nous (ActionBar, ContextPanel, ScrewPanel)
+              5. Instancia el Coordinator de modes
+
+L.155-156  Elimina la pantalla de loading.
+
+L.157  return w
+
+
+─────────────────────────────────────────────────
+3.3  ViewerDLSPro.__init__()  (viewer_cobot.py:115-196)  ★ EL COR ★
+─────────────────────────────────────────────────
+
+Aquest és el fitxer més gran (1605 línies). El `__init__` fa 10 blocs:
+
+BLOC A: Estat del mando serial (viewer antic — ara duplica amb MandoService)
+    L.119-137   self.mando_port = "COM4", mando_baud, mando_serial = None,
+                mando_active = False, mando_raw = [0,0,0,0,0,0]
+                També gain/filtre pel control: mando_gain_xyz, mando_ema_alpha,
+                mando_max_lin_speed, mando_zero_raw, mando_zero_tcp...
+
+BLOC B: Càrrega dels fitxers de configuració
+    L.140   self.robot = load_urdf("config/cobot.urdf")
+            → objecte Robot amb llista de Link i Joint
+            → Fitxer: src/model/urdf_loader.py
+
+    L.141   self.prims = load_collisions("config/collision_geometry.yaml")
+            → dict {link_name: [primitives (cilindre/caixa) amb T relatiu]}
+            → Fitxer: src/collision/collision_loader.py
+
+    L.142   capcal_manager_init(self)
+            → viewer.capcal_manager (gestiona el capcal actiu)
+            → Fitxer: scripts/viewer_capcals_patch.py (fa setattr al viewer)
+
+    L.143   self.motor_config = load_motor_config("config/motor_config.yaml")
+            → MotorConfig amb els 6 motors (id, encoder_counts_per_rev,
+                                            direction, zero_offset_counts,
+                                            reduction, baudrate...)
+            → Fitxer: src/hardware/motor_config.py
+
+BLOC C: Motor controller (SENSE connectar encara)
+    L.158-165  robot_port = load_preferences().get("robot_port", DEFAULT_PREFS[...])
+               self.motor_controller = MotorController(self.motor_config, port=robot_port)
+            El port surt de Preferències (robot_port). Per defecte és
+            tcp://192.168.1.140:5000: el pont TCP del Ventuno Q, que té el
+            convertidor TA_CAN. Amb /dev/cu.usbmodem... es torna al convertidor
+            USB directe al Mac. Es llegeix a l'arrencada: si el canvies, reinicia l'app.
+            Crea l'objecte, però NO obre la connexió. Es connecta quan es
+            clica "Connect" (secció 4).
+            → Fitxer: src/hardware/motor_controller.py
+            → Arquitectura del pont, systemd, logs i checklist de seguretat:
+              ventuno/README.md
+
+    L.147   self.mirror_active = False
+            Mentre mirror estigui OFF, el bucle 100 Hz NO envia q als motors.
+
+BLOC D: Mando com a "robot" 3D visualitzable
+    L.150   self.mando_robot = load_urdf("config/mando6dof.urdf")
+            El mando té la seva pròpia estructura cinemàtica.
+    L.151-155  mando_offset (posició visual al 3D), yaw, actors (actors PyVista
+               dels STLs), pulsos_per_volta, diametre del corró.
+
+BLOC E: Estat cinemàtic del cobot
+    L.158   self.q = np.zeros(6)         ← tots els joints a 0
+    L.159   self.poses = forward_kinematics(self.robot, self.q)
+            → dict {link_name: T4x4}
+            → Fitxer: src/kinematics/forward.py
+
+    L.164-170  Definició de "target":
+               T_ref_pos        = posició de referència (es resincronitza
+                                  cada cop que entres a IK)
+               R_target_initial = rotació de referència
+               T_target         = pose que l'IK vol assolir
+               target_xyz, target_rpy = DESPLAÇAMENTS respecte T_ref
+                                  (els sliders apliquen deltas, no absoluts)
+
+    L.172   self.e_smoothed = np.zeros(6)   ← error 6D filtrat (per suavitzar)
+    L.173   self.current_status = "ok"
+    L.174   self.blocked_violating = set()  ← links que col·lideixen
+
+BLOC F: Mode inicial
+    L.179   self.mode = "IK"   ← per defecte, IK 6DOF
+    L.184   self._handguide_active = False
+
+BLOC G: Finestra Qt
+    L.187-189  setWindowTitle, resize(1700, 950), _apply_style()
+                (CSS global del viewer)
+
+BLOC H: UI principal
+    L.190   self._build_ui()   crea els sliders, botons, panells
+                               (viewer_cobot.py:312-446)
+            Dins es construeixen:
+              · joints_panel: 6 sliders rad per joint
+              · cart_panel  : 6 sliders (XYZ en mm, RPY en graus)
+              · overlay botons: Mode toggle, Mando, Connect, Mirror, STOP...
+              · consola de text a la dreta
+              · widget 3D QtInteractor (PyVista dins Qt)
+
+BLOC I: Escena 3D
+    L.191   self._setup_3d_scene()   (viewer_cobot.py:648-691)
+            · Afegeix tots els STLs del cobot al plotter
+            · Dibuixa els "triads" (eixos XYZ) a la base i al TCP
+            · Dibuixa un target wireframe (actors transparents)
+            · Afegeix una graella de referència a terra
+            · Posiciona la càmera
+
+BLOC J: Timer de control a 100 Hz
+    L.194   self.timer = QtCore.QTimer()
+    L.195   self.timer.timeout.connect(self._teleop_step)
+    L.196   self.timer.start(int(CONTROL_DT * 1000))   ← 10 ms
+
+    DES D'AQUEST MOMENT, cada 10 ms Qt crida _teleop_step().
+    Veurem què fa a la secció 5.
+
+
+─────────────────────────────────────────────────
+3.4  Workspace: embolcall + overlays  (workspaces/robot.py)
+─────────────────────────────────────────────────
+
+Un cop ViewerDLSPro està creat, RobotWorkspace.__init__ continua:
+
+    1. coordinator.hide_redundant_widgets(viewer)
+       Amaga els botons duplicats del viewer (btn_mode, btn_mando, btn_zero...)
+       perquè ara els substituïm per la nostra UI (ActionBar + ModeSelector).
+
+    2. Instancia panells:
+       · ActionBar (dalt del viewer):     [Connect] [Mirror] [Home] [STOP] [...]
+       · ContextPanel (dreta):            canvia segons mode actiu
+       · ScrewPanel (opcional):           llista de cargols planificats
+       · ModeSelector (lateral):          5 botons FK/IK6/IK5/MANDO/HANDGUIDE
+       · CapcalSelectorOverlay:           pantalla inicial per escollir capcal
+
+    3. Instancia Coordinator (modes/coordinator.py):
+       Objecte sense estat que exposa funcions enter_fk, enter_ik6, enter_ik5,
+       enter_mando, enter_handguide.
+       El workspace les connecta al ModeSelector:
+          mode_selector.modeChanged.connect(self._on_mode_changed)
+       I _on_mode_changed fa:
+          coordinator.enter_idle(viewer)
+          coordinator.MODE_ENTER[new_mode](viewer)
+
+A partir d'aquí, l'app està viva. El bucle 100 Hz corre buit (sense fer res
+visible) i la UI espera clics.
+
+
+
+
+################################################################################
+#   PART 4 - CONNECTAR ELS MOTORS                                              #
+################################################################################
+
+Fins ara, el viewer treballa amb q interna i no toca cap motor real. Quan
+l'usuari clica "Connect" al ActionBar:
+
+
+─────────────────────────────────────────────────
+4.1  Clic "Connect" → viewer._on_connect_motors()  (viewer_cobot.py:900-975)
+─────────────────────────────────────────────────
+
+Hi ha 3 casos possibles:
+
+CAS 1: motors mai connectats (daemon mort)
+    L.919   self.motor_controller.connect()
+            → MotorController.connect():
+                 self.bus = MotorBus(motor_ids, port="COM3", baudrate)
+                 → MotorBus.__init__:
+                     Si port != None:
+                        subprocess.Popen([python, "-m", "src.hardware._daemon",
+                                          port, baud, ...])
+                        → Arrenca un procés fill INDEPENDENT que:
+                           1. Obre COM3 (o el que sigui)
+                           2. Fa dos threads interns:
+                              - reader_thread: llegeix bytes del port
+                              - cmd_reader_thread: llegeix JSON del stdin
+                           3. Bucle principal 25 Hz:
+                                envia status via stdout com a JSON
+                                (comunicació asíncrona)
+                        + al pare crea dos threads:
+                           - _read_stdout_thread: parsa el JSON del subprocés
+                           - _read_stderr_thread: imprimeix logs del subprocés
+                        → arxiu src/hardware/_daemon.py
+                     Si port == None: crea un simulador en memòria.
+    L.920   self.motor_controller.enable_position_control()
+            → bus.select_mode(Mode.POSITION_MODE) per cada motor
+            → envia paquet SitoDrive (13 bytes) via raw_bytes al daemon
+    L.924   self.motor_controller.send_q(self.q)
+            → converteix q (rad) a counts, envia a cada motor paquets
+              encode_position(current_mA, velocity_counts, target_counts).
+
+CAS 2: ja connectat però els motors estaven en RESET (venim d'un STOP)
+    L.939   RESET + enable_position_control + send_q (3 cops)
+            Mateix patró que al cas 1 però sense obrir port de nou.
+
+CAS 3: desconnexió (clic amb btn_connect ja checked)
+    L.969   motor_controller.bus.reset_all() → tots els motors passius
+
+
+─────────────────────────────────────────────────
+4.2  Flux de comunicació quan envies una q
+─────────────────────────────────────────────────
+
+Quan motor_controller.send_q(q_rad) s'executa:
+
+    1. [procés viewer] q_rad → counts    (motor_converter.py)
+    2. [procés viewer] bus.write_positions_pure(current, velocity, counts)
+       → encode_position(id, I, v, c) → bytes de 13 bytes (protocol SitoDrive)
+       → self._daemon.send({"cmd": "raw_bytes", "bytes": [...]})
+       → json.dumps al stdin del subprocés
+    3. [subprocés daemon] cmd_reader_thread rep el JSON i escriu els 13
+       bytes al port sèrie COM3.
+    4. [controladora motor] rep els bytes, mou el motor.
+    5. [controladora motor] envia bytes de feedback (posició, velocitat...).
+    6. [subprocés daemon] reader_thread llegeix els bytes del port,
+       els parsa, i envia un JSON {status: {motor_id: {pos, vel, I, ...}}}
+       pel stdout.
+    7. [procés viewer] _read_stdout_thread rep el JSON i actualitza
+       self.bus._latest_status.
+    8. Quan algú crida bus.poll_feedback() rep l'últim status conegut.
+
+
+
+
+################################################################################
+#   PART 5 - EL BUCLE 100 Hz: _teleop_step()                                   #
+################################################################################
+
+Aquesta és la funció que corre cada 10 ms a dins del Qt event loop.
+És el motor del viewer (viewer_cobot.py:1099-1206).
+
+
+─────────────────────────────────────────────────
+5.1  Visió general per modes
+─────────────────────────────────────────────────
+
+Hi ha 5 modes que afecten què fa _teleop_step:
+
+    HANDGUIDE  Un controller EXTERN (HandGuideController, en un timer 50 Hz
+               a part) escriu self.q amb la q real dels motors. _teleop_step
+               NOMÉS redibuixa el 3D amb aquesta q. No fa IK, no envia res.
+
+    FK         Els sliders dels joints toquen self.q directament. _teleop_step
+               fa FK i redibuixa. target es manté sincronitzat amb el TCP
+               (perquè si tornes a IK, no faci salts).
+
+    IK (6DOF)  Els sliders cartesians modifiquen target_xyz/target_rpy.
+               _teleop_step calcula l'error → DLS → q_dot → q_new, mira
+               col·lisions i límits, aplica q_final, dibuixa i (si mirror)
+               envia als motors.
+
+    IK5        IK de 5 graus: el DLS fa servir només J1-J5 (Jacobià 6×5) i
+               ignora el gir al voltant de l'eix de la broca (el fa el J6).
+               El J6 es queda quiet en POSITION_MODE; només passa a
+               CURRENT_MODE mentre la broca gira (modes/j6_drill.py), i
+               llavors l'IK fa servir un q[5] congelat (_j6_ik_override):
+               XYZ/RPY funcionen mentre trepa i J1-J5 no noten el gir.
+
+    MANDO      Idèntic a IK però abans del DLS mapeja el mando a target.
+
+
+─────────────────────────────────────────────────
+5.2  _teleop_step() línia per línia  (CAS IK, el més complet)
+─────────────────────────────────────────────────
+
+L.1103  if self._handguide_active:
+        → HANDGUIDE: només FK i redibuixat. Return.
+
+L.1112  if self.mode == "MANDO":
+        → self._mando_apply_to_target()    (línies 1442+)
+          Llegeix self.mando_raw (ja actualitzat pel thread del mando),
+          calcula delta vs mando_zero_raw, aplica gain + EMA + saturació,
+          actualitza T_target.
+
+L.1115  self.poses = forward_kinematics(self.robot, self.q)
+        FK amb la q actual. Retorna dict {link_name: T4x4}.
+L.1116  T_actual = self.poses["tcp_link"]
+
+L.1122-1130  if self.mode == "FK":
+        En FK no hi ha IK. Forcem T_target = T_actual perquè quan canviï a
+        IK no hi hagi error acumulat.
+
+L.1132  e_raw = pose_error(T_actual, T_target)
+        → vector 6D [epos_x, epos_y, epos_z, eori_x, eori_y, eori_z]
+        → Fitxer: src/control/pose_error.py
+
+L.1133-1134  Guany: multipliquem posició per KP_POS=5.0 i orient. per KP_ORI=3.0.
+
+L.1136  self.e_smoothed = self.e_smoothed + ALPHA*(e_raw - self.e_smoothed)
+        Filtre EMA de l'error per no fer salts.
+
+L.1138-1140  err_pos = norm(e[:3])/KP_POS, err_ori = norm(e[3:])/KP_ORI
+        target_reached = (err_pos < TOL_POS) and (err_ori < TOL_ORI)
+
+L.1142  J = compute_jacobian(self.robot, self.q)
+        Jacobià 6×6 numèric (diferencies finites).
+        → Fitxer: src/kinematics/jacobian.py
+
+L.1143  w = yoshikawa_position(J)
+        Mesura de manipulabilitat (det(J·J^T) a prop de 0 = singularitat).
+        → Fitxer: src/kinematics/manipulability.py
+
+L.1144  lam = adaptive_damping(w, LAMBDA_MIN, LAMBDA_MAX, W_THRESHOLD)
+        Si w < threshold → augmentem λ (més damping, més estabilitat).
+        Si w gran        → λ petit (seguim el target amb precisió).
+
+L.1146  q_dot = dls(J, self.e_smoothed, lam)
+        q_dot = J^T · (J·J^T + λ²·I)^-1 · e
+        → Fitxer: src/control/dls_solver.py
+
+L.1147-1148  if self._ik5dof: q_dot[5] = 0.0
+        En IK5, congelem el J6.
+
+L.1149  q_dot = np.clip(q_dot, -MAX_JOINT_SPEED, +MAX_JOINT_SPEED)
+        Limitem velocitat angular per no excedir el que els motors poden fer.
+
+L.1151  q_new = self.q + q_dot * CONTROL_DT   (dt = 10 ms)
+
+L.1152  q_final, status, violating = self._try_q_new(self.q, q_new)
+        Comprova:
+         · q_new dins dels límits de joint? (JOINT_LOWER/UPPER)
+         · col·lisions amb check_collisions_with_margin? (src/collision/checker.py)
+        Retorna:
+         · status "ok": pot aplicar q_new tal qual
+         · status "blocked": troba enemic → es queda a self.q, i violating
+           és el set de link names que col·lideixen.
+
+L.1153  self.q[:] = q_final   ← aplica el nou q
+
+L.1155-1161  Determina display_violating (per pintar en vermell els links
+             problemàtics).
+
+L.1163-1168  Si estem en IK, actualitzem els sliders de joints perquè
+             reflecteixin la q nova (sense disparar els callbacks: flag
+             self._updating_sliders).
+
+L.1170  self.poses = forward_kinematics(self.robot, self.q)
+        FK amb la q DEFINITIVA.
+
+L.1171-1174  Per cada link, actualitzem actor.user_matrix a self.poses[link].
+             Això fa que PyVista repinti els STLs a la nova pose.
+
+L.1176-1188  Pintat de colors:
+             · BLOCKED → vermells els links que col·lideixen
+             · TARGET REACHED → ting gris clar
+             · OK → gris normal
+
+L.1193  self._update_console(T_actual)
+        Imprimeix a la consola de text del viewer la pose, els joints,
+        els rads del mando i les q dels motors reals.
+
+L.1195-1202  if self.mirror_active and motor_controller.is_connected:
+             self.motor_controller.send_q(self.q)
+             AQUÍ és on es parla amb els motors reals, a 100 Hz!
+
+L.1204-1205  if self.mando_active:
+             self._mando_update_poses()   actualitza visualment el mando 3D
+
+Fi del tic. Return. Qt torna a esperar 10 ms i repeteix.
+
+
+
+
+################################################################################
+#   PART 6 - CANVI DE MODE: EL COORDINATOR                                     #
+################################################################################
+
+Quan l'usuari clica un botó del ModeSelector:
+
+
+─────────────────────────────────────────────────
+6.1  ModeSelector → coordinator
+─────────────────────────────────────────────────
+
+modes/mode_selector.py emet modeChanged(new_mode: str).
+Aquest signal està connectat al RobotWorkspace._on_mode_changed, que fa:
+
+    coordinator.enter_idle(viewer)          # pas 1: deixar en estat net
+    coordinator.MODE_ENTER[new_mode](viewer) # pas 2: entrar al mode nou
+
+MODE_ENTER és un dict:
+    {"fk": enter_fk, "ik6": enter_ik6, "ik5": enter_ik5,
+     "mando": enter_mando, "handguide": enter_handguide}
+
+
+─────────────────────────────────────────────────
+6.2  enter_idle(viewer)  (coordinator.py:111-136)
+─────────────────────────────────────────────────
+
+Aquesta funció DEIXA EL SISTEMA EN ESTAT CONEGUT abans de qualsevol transició.
+Fa 4 coses:
+
+    1. Si btn_mando_control està checked → el des-marca i crida
+       _on_mando_control_toggle() (atura el control del cobot pel mando).
+
+    2. Si btn_mando està checked → el des-marca i crida _on_mando_toggle()
+       (desconnecta el mando serial i treu el 3D del mando).
+
+    3. Si btn_mirror està checked → el des-marca i crida _on_mirror_toggle()
+       (deixa d'enviar q als motors; important per no "ferir" el bus durant
+       la transició).
+
+    4. viewer._ik5dof = False (per si veníem d'IK5).
+
+Al sortir d'enter_idle, el sistema és segur per entrar a qualsevol mode.
+
+
+─────────────────────────────────────────────────
+6.3  enter_ik5(viewer)  (coordinator.py)   i la broca (modes/j6_drill.py)
+─────────────────────────────────────────────────
+
+enter_ik5 només posa viewer.mode="IK", viewer._ik5dof=True (IK amb J1-J5)
+i sincronitza el target. Després el workspace crida J6Drill.arm().
+
+FETS CLAU DEL FIRMWARE SITODRIVE:
+  1. Només canvia de mode des de RESET, i després d'un RESET necessita
+     temps (≥0.2 s). Un mode_selection 50 ms després s'ignora (blau, no gira).
+  2. Recorda l'últim target de POSICIÓ encara que passi per CURRENT o
+     RESET, i en tornar a POSITION el reprèn: si la broca ha fet N voltes,
+     les DESFÀ. Per això el target nou s'envia enganxat al mode_selection
+     (MotorController.enable_position_control_at / j6_drill.j6_to_position).
+  3. Després d'un RESET, el comptador de posició torna a UNA SOLA VOLTA
+     ([-32768, 32767]): després de trepar 5 voltes, 311034 → -16646 (mateix
+     lloc físic). Els targets post-RESET es calculen amb fw_frame() i
+     l'offset de configuració no es toca mai.
+
+CICLE DE LA BROCA (J6Drill, modes/j6_drill.py):
+    arm()      entrar a IK5: guarda la posició, J6 fora del send_q, l'IK
+               congela q[5] (_j6_ik_override), RESET → J6 blau.
+    start()    (≥0.3 s després del RESET) mode_selection(CURRENT) +
+               corrent amb rampa. J1-J5 segueixen amb l'IK5 → XYZ/RPY van.
+    stop()     rampa a 0, espera que estigui quiet (posició estable), guarda
+               la posició en el comptador post-RESET (fw_frame) i RESET →
+               blau (armat).
+    arm()      deixa guardats al firmware velocitat i corrent MÍNIMS: si en
+               entrar a POSITION anés un instant cap al target vell, seria
+               lent i fluix.
+    disarm()   sortir d'IK5: RESET assentat → POSITION amb target = posició
+               guardada (just abans i just després del mode_selection) +
+               vigilant 0.3 s. q[5] sense voltes senceres (offset).
+    abort()    STOP / E-STOP: 0 mA, espera que s'aturi (en CURRENT, amb
+               feedback), RESET, i q[5] = on ha quedat → en reconnectar
+               no desfà voltes.
+
+Diagnòstic al robot real: python scripts/diagnostic_j6.py
+
+
+─────────────────────────────────────────────────
+6.4  Sortir d'IK5
+─────────────────────────────────────────────────
+
+_activate_mode crida J6Drill.disarm() al pas 1 (vegeu 6.3): quan acaba,
+el J6 és en POSITION a la posició guardada i dins del send_q.
+_ensure_j6_included és només una xarxa de seguretat per si el J6 encara
+fos fora del send_q.
+
+
+
+
+################################################################################
+#   PART 7 - MODE HANDGUIDE (guia manual)                                      #
+################################################################################
+
+Aquest mode és especial perquè els motors funcionen en CURRENT_MODE (torque
+control), no POSITION_MODE. El viewer NO envia posicions: el HandGuideController
+envia corrents.
+
+
+─────────────────────────────────────────────────
+7.1  Flux d'entrada
+─────────────────────────────────────────────────
+
+1. L'usuari clica "HANDGUIDE" al ModeSelector.
+2. _on_mode_changed() fa:
+       coordinator.enter_idle(viewer)
+       coordinator.enter_handguide(viewer):
+           viewer.mode = "FK"               ← per no fer IK dins _teleop_step
+           viewer._ik5dof = False
+           _ensure_j6_included(viewer)
+           _apply_visual_mode(viewer)
+3. El RobotWorkspace detecta el canvi i:
+       viewer._handguide_active = True       ← _teleop_step només redibuixa
+       hg = HandGuideController(motor_controller, dyn_params, robot,
+                                on_q_updated=lambda q: setattr(viewer, "q", q),
+                                on_limit_hit=..., on_error=...)
+       hg.start()
+       timer_hg = QTimer(50 Hz) → hg.step()
+
+
+─────────────────────────────────────────────────
+7.2  HandGuideController.start()  (handguide_controller.py)
+─────────────────────────────────────────────────
+
+Vegeu els comentaris de l'arxiu, però el flux és:
+
+    1. Captura q inicial (self._q_last = mc.read_q().copy())
+    2. bus.reset_all() + sleep 200 ms
+    3. Per cada motor target: _send_mode_to_motor(RESET) + sleep 50 ms
+    4. Per cada motor target: _send_mode_to_motor(CURRENT_MODE) + sleep 50 ms
+    5. Per tots: _send_current_to_motor(0)
+    6. Fins a 1 s esperant feedback de tots.
+    7. self._active = True
+
+
+─────────────────────────────────────────────────
+7.3  HandGuideController.step()  (50 Hz, 20 ms per tic)
+─────────────────────────────────────────────────
+
+1. bus.poll_feedback() → st (dict amb la lectura de cada motor).
+   Si falta algun motor → tots a 0 mA i return.
+
+2. Converteix counts → q_rad amb motor_counts_to_q.
+   Guarda self._q_last.
+
+3. on_q_updated(q_rad) → el viewer actualitza self.q, i al proper tic de
+   _teleop_step (que ara només redibuixa) es veu el braç moure's al 3D.
+
+4. Comprova límits per cada joint. Si fora: 0 mA i on_limit_hit.
+
+5. Càlcul de gravetat:
+       tau = gravity_torques(robot, q_rad, dyn_params)   ← Newton-Euler
+       hg = torques_to_currents_handguide(tau, dyn_params) → mA per joint
+
+6. Per cada joint:
+       filtre EMA de la velocitat (v_filt)
+       alpha = rampa 0..1 entre v_low i v_high
+       I_grav = I_grav_all[j_idx] * k_trim
+       if alpha > 0:
+          I_push = i_push_up o i_push_dn segons direcció vs gravetat
+          I_fric = fricció convertida a mA
+          I_assist = alpha * sign(v) * (I_fric + I_push)
+       I_cmd = I_grav + k_assist * I_assist
+       I_target = clamp(I_cmd, -1500, +1500)
+       _send_current_to_motor(mid, I_target)
+
+Resultat: l'operador pot moure el braç a mà. La gravetat queda compensada
+exactament, i quan ja hi ha moviment detectat, el controller afegeix una
+empenta per vèncer la fricció interna.
+
+
+─────────────────────────────────────────────────
+7.4  Sortir del mode HANDGUIDE
+─────────────────────────────────────────────────
+
+    timer_hg.stop()
+    hg.stop():
+        _send_zero_current_to_all(0 mA)
+        _send_mode_to_motor(RESET) per cada motor
+        self._active = False
+    viewer._handguide_active = False
+
+Si l'usuari ara entra a IK/IK5, el flux normal via coordinator torna a posar
+els motors en POSITION_MODE amb un send_q = q actual (sense moviment).
+
+
+
+
+################################################################################
+#   PART 8 - EL MANDO (controlador 6DOF)                                       #
+################################################################################
+
+─────────────────────────────────────────────────
+8.1  MandoService (nou servei compartit)
+─────────────────────────────────────────────────
+
+Fitxer: scripts/neurospine_app/mando_service.py
+
+Un únic servei singleton (`get_mando_service()`) obre COM4 @ 115200 un cop
+i llegeix a 20 Hz. Cada lectura emet un signal Qt reading(dict):
+    {"pols": [p1..p6], "rad_x": ..., "rad_y": ..., "rad_z": ...,
+     "raw_x": mm, "raw_y": mm, "raw_z": mm, "timestamp": t}
+
+Qualsevol workspace pot subscriure's:
+    self.mando_service.reading.connect(self._on_mando_data)
+
+
+─────────────────────────────────────────────────
+8.2  Mando dins ViewerDLSPro (viewer antic, encara existeix en paral·lel)
+─────────────────────────────────────────────────
+
+El viewer_cobot té un bucle propi en thread per llegir el mando directament
+(no el servei), perquè és codi anterior a MandoService. Les parts clau:
+
+    _mando_connect     obre serial + llança thread + crida _mando_load_scene
+                       (dibuixa els STLs del mando al 3D)
+    _mando_read_loop   bucle en thread que fa serial.read(128), parsa i
+                       actualitza self.mando_raw
+    _mando_parse(line) extreu els 6 enters del format "p1:xxx|p2:yyy|..."
+    _mando_apply_to_target  (en mode MANDO, dins _teleop_step):
+        · delta = mando_raw - mando_zero_raw
+        · desplaçament XYZ i rotació RPY amb gain i filtre EMA
+        · saturació de velocitat lineal/angular
+        · actualitza T_target per l'IK
+
+
+
+
+################################################################################
+#   PART 9 - WORKSPACES ADDICIONALS                                            #
+################################################################################
+
+─────────────────────────────────────────────────
+9.1  PlanningWorkspace (planning.py + planning_widget.py)
+─────────────────────────────────────────────────
+
+· Shell lleugera (planning.py) que embolcalla un widget pesat (planning_widget.py).
+· El widget carrega el TAC del pacient (escoliosis.nrrd) i els STLs de les
+  vèrtebres (data/pacients/<id>/vertebres_meshes/*.stl).
+· Permet definir cargols: punt d'entrada + punt de sortida, i previsualitzar
+  el vector i la broca sobre el TAC.
+· El resultat es desa a data/pacients/<id>/cargols.json.
+· "Eliminar cargol" (o Supr): treu el cargol seleccionat i renumera la resta.
+· ANÀLISI D'ANCORATGE (src/planning/screw_analysis.py), en seleccionar un
+  cargol: mostreja els HU reals del TAC en un cilindre al voltant del
+  cargol (marc físic: origin + índex·spacing):
+    - densitat d'ancoratge (HU a la zona de les estries) + perfil
+    - perforació: sectors fora de l'os just fora de la paret (i si van
+      cap al canal medul·lar)
+    - distància de la superfície del cargol a la medul·la
+    - istme del corredor ossi i Ø estàndard màxim amb 0.5 mm de marge
+    - "Optimitzar trajectòria": entrada fixa, ±6°, maximitza densitat
+      sense perforar i allunyant-se de la medul·la → "Aplicar"
+  Llindars orientatius (HU_SOFT, HU_LOW, HU_OK…) al principi del mòdul.
+
+
+─────────────────────────────────────────────────
+9.2  RegistrationWorkspace (registration.py + registration/kabsch.py)
+─────────────────────────────────────────────────
+
+· L'usuari marca punts de referència al TAC (vèrtebra 3D) i al robot real
+  (tocant amb la bola). Es desen a fiducials.json.
+· El Kabsch calcula la matriu rígida T_registre 4x4 que porta punts del TAC
+  al sistema de coordenades del robot.
+· Es desa a T_registre.npy.
+· El header mostra una llum verda si T_registre.npy existeix.
+
+
+─────────────────────────────────────────────────
+9.3  NavigationWorkspace (navigation.py)
+─────────────────────────────────────────────────
+
+· Pantalla de GUIAT: el que mira el cirurgià mentre posa un cargol.
+  No té lògica de robot pròpia: tot crida el RobotWorkspace.
+· PUNTERIA (mira): vista al llarg de l'eix del cargol planificat.
+    ● punta de la broca  (desviació lateral respecte la trajectòria)
+    ○ cua, 40 mm enrere  (desviació angular)
+  Tots dos al centre = broca sobre la trajectòria i alineada.
+  Anells d'1/2/5 mm, zona verda = tolerància (1 mm, 1°).
+· PROFUNDITAT: posició de la punta al llarg de l'eix des de l'entrada
+  (approach -10, entrada 0, final L), el que queda, i zona de perill > L.
+· FLUX: ① Approach (passa a IK6 i va a 1 cm) → ② Mode broca (IK5) →
+  ③ Start/Stop + corrent → ④ Avanç (0.5 mm/pas) → Marcar completat.
+· Mètriques: navigation.guidance_metrics() (pura, sense Qt).
+  Toleràncies: TOL_OK_MM / TOL_WARN_MM / TOL_OK_DEG / TOL_WARN_DEG.
+
+
+
+
+################################################################################
+#   PART 10 - QUÈ PASSA AL TANCAR LA FINESTRA                                  #
+################################################################################
+
+Quan l'usuari clica la X de la finestra:
+
+1. Qt emet un closeEvent. NeuroSpineMainWindow.closeEvent() (main_window.py:270):
+       self._status_timer.stop()            atura el QTimer d'estat
+       self.mando_service.stop()            atura el thread del mando
+                                             → tanca COM4
+       Per cada workspace:
+          w.cleanup() (si existeix):
+             RobotWorkspace.cleanup:
+                 viewer.timer.stop()        atura el bucle 100 Hz
+                 viewer.motor_controller.disconnect():
+                     bus.close():
+                         _daemon.send({"cmd": "quit"})
+                         thread stdout.join()
+                         subprocess.wait()  ← el daemon mor netament
+       event.accept()
+
+2. Qt crida els destructors de totes les finestres i objectes.
+
+3. app.exec_() retorna, sys.exit tanca el procés.
+
+
+
+
+################################################################################
+#   PART 11 - RESUM VISUAL DE PROCESSOS/THREADS                                #
+################################################################################
+
+┌────────────────────────────────────────────────────────────────────────┐
+│  PROCÉS PRINCIPAL PYTHON (neurospine.py)                               │
+│                                                                        │
+│  ┌─────────────────────────┐  ┌──────────────────────────┐             │
+│  │ Qt Main Thread          │  │ MandoService Thread      │             │
+│  │  · event loop           │  │  · QTimer 50ms           │             │
+│  │  · QTimer _teleop 10 ms │  │  · llegeix COM4 (mando)  │             │
+│  │  · QTimer _status 1 s   │  │  · emet signal reading   │             │
+│  │  · QTimer _hg (50 Hz)   │  └──────────────────────────┘             │
+│  │     (només si HG actiu) │                                           │
+│  └─────────────────────────┘                                           │
+│  ┌─────────────────────────┐  ┌──────────────────────────┐             │
+│  │ _read_stdout Thread     │  │ _read_stderr Thread      │             │
+│  │  (parsa JSON daemon)    │  │  (prints logs daemon)    │             │
+│  └─────────────────────────┘  └──────────────────────────┘             │
+│  ┌─────────────────────────┐                                           │
+│  │ mando_thread (vell)     │  ← només si viewer_cobot ha connectat     │
+│  │  (llegeix COM4 serial)  │     el mando directament. Convivència     │
+│  └─────────────────────────┘     amb MandoService (una d'elles sobra). │
+│          ▲   ▼                                                         │
+└──────────┼───┼─────────────────────────────────────────────────────────┘
+           │   │  (JSON per stdin/stdout del subprocés)
+           │   ▼
+┌──────────┼─────────────────────────────────────────────────────────────┐
+│  SUBPROCÉS DAEMON (_daemon.py)                                         │
+│  ┌─────────────────────────┐  ┌──────────────────────────┐             │
+│  │ reader_thread           │  │ cmd_reader_thread        │             │
+│  │  (llegeix bytes COM3)   │  │  (llegeix JSON del stdin)│             │
+│  └─────────────────────────┘  └──────────────────────────┘             │
+│  ┌───────────────────────────────────────────────────────┐             │
+│  │ main loop 25 Hz: envia status via stdout (JSON)       │             │
+│  └───────────────────────────────────────────────────────┘             │
+│          ▲   ▼  (bytes del protocol SitoDrive)                         │
+└──────────┼───┼─────────────────────────────────────────────────────────┘
+           │   │
+           ▼   ▲
+     ┌──────────────────┐
+     │  6 SitoDrive     │
+     │  motors reals    │
+     └──────────────────┘
+
+
+
+
+################################################################################
+#   PART 12 - MINI-GLOSARI D'ATRIBUTS DEL ViewerDLSPro                         #
+################################################################################
+
+(Perquè quan vegis `self.X` al viewer sàpigues què és sense marejar-te.)
+
+self.robot                 Robot URDF del cobot (objecte amb links i joints)
+self.mando_robot           Robot URDF del mando (6 DOF també)
+self.prims                 Primitives de col·lisió per link (dict)
+self.capcal_manager        Gestor del capcal actiu (bola/punxó/broca)
+self.motor_config          MotorConfig amb els 6 motors
+self.motor_controller      MotorController (wrapper d'alt nivell)
+self.q                     Vector 6 rad: estat intern del cobot
+self.poses                 dict {link_name: T4x4} de la FK actual
+self.T_ref_pos             posició de referència (sliders XYZ són delta)
+self.R_target_initial      rotació de referència (sliders RPY són delta)
+self.T_target              pose que l'IK ha d'assolir
+self.target_xyz            delta posició (set pels sliders XYZ)
+self.target_rpy            delta orientació (set pels sliders RPY)
+self.e_smoothed            error 6D filtrat (per no fer salts al DLS)
+self.mode                  "IK", "FK" o "MANDO"
+self._ik5dof               True si q_dot[5] s'ha de congelar
+self._handguide_active     True si _teleop_step ha de ser passiu (només redibuix)
+self.mirror_active         True si send_q als motors reals està actiu
+self.mando_active          True si el mando serial està connectat (viewer vell)
+self.mando_raw             últims 6 enters llegits del mando (lectura bruta)
+self.mando_zero_raw        pols del mando guardats al "Set Zero"
+self.mando_zero_tcp        pose del TCP guardada al "Set Zero"
+self.timer                 QTimer de 10 ms que crida _teleop_step
+self.stl_actors            {link_name: actor PyVista} del cobot
+self.tip_actors            llista d'actors de la punta (capcal)
+self.target_actors         llista d'actors wireframe del target
+self.mando_actors          {link_name: actor PyVista} del mando 3D
+self.current_status        "OK" | "BLOCKED" | "TARGET REACHED"
+self.blocked_violating     set de link_names que col·lideixen
+
+
+
+
+################################################################################
+#   PART 13 - RECORREGUT TÍPIC D'UNA SESSIÓ (end-to-end narratiu)              #
+################################################################################
+
+1. Executes `python neurospine.py`.
+2. S'obre la finestra. ROBOT és el workspace actiu per defecte.
+   El bucle 100 Hz corre buit (self.q = [0,0,0,0,0,0], mirror OFF).
+3. Cliques el workspace PLANNING. Es carrega lentament (TAC = fitxer pesant).
+   Dibuixes els cargols que vols col·locar. Es desa cargols.json.
+4. Cliques REGISTRATION. Vas tocant amb la bola del robot els punts de la
+   vèrtebra real i els punts corresponents al TAC. El Kabsch calcula T_registre.
+   Es desa T_registre.npy. El header mostra ✓ a Registration.
+5. Tornes al workspace ROBOT.
+6. Cliques "Connect" a l'ActionBar.
+     · MotorController.connect() → arrenca el daemon (COM3).
+     · enable_position_control + send_q(q=0) → els motors es desperten.
+7. Cliques "Mirror" → mirror_active = True.
+     · Ara cada tic del bucle 100 Hz envia send_q(self.q) als motors.
+     · El robot real segueix exactament el virtual.
+8. Esculls el mode IK6. Mous els sliders cartesians: el braç es mou al TCP
+   desitjat. DLS resol en temps real.
+9. Vols fer un torque amb la broca: cliques IK5.
+     · enter_ik5 posa el J6 en RESET i l'exclou del send_q.
+     · El panell TORQUE del J6 et deixa controlar la broca per corrent.
+10. Vols la posició final de la broca al cargol: control fi amb MANDO.
+     · Cliques el mode MANDO. enter_mando:
+         - connecta el mando serial (COM4) si no ho està
+         - fa Set Zero amb la pose actual
+         - activa el control del cobot pel mando
+     · Mous el mando: el robot segueix amb filtre EMA i saturació de velocitat.
+11. Al final, cliques "STOP" → bus.reset_all() → tots els motors passius.
+12. Tanques la finestra. closeEvent neteja timers, serveis, i mata el daemon.
+
+
+
+
+################################################################################
+#   FINAL                                                                      #
+################################################################################
+
+A partir d'aquí, cada fitxer del codi està comentat seguint aquesta mateixa
+filosofia: una explicació per cada operació no-trivial. Si en algun punt
+no entens quelcom, torna aquí i mira la secció corresponent a aquesta fase
+d'execució.
+
+Qualsevol atribut `self.X` que vegis al viewer està resumit al Mini-glosari
+(part 12). Qualsevol concepte (URDF, FK, IK, DLS, TCP) està al diccionari
+inicial (part 0).
+
+Bona pesca.

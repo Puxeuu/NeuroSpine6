@@ -1,0 +1,99 @@
+# ==============================================================================
+# CAPCALS INTERCANVIABLES DEL COBOT NEUROSPINE6
+#
+#   nom          
+#   descripcio   Text que es mostra al selector del viewer.
+#   mesh         Ruta al STL (a config/).
+#   visual_rpy   Correcció d'orientació de l'STL si no està ben alineat
+#   color        Color per pintar-lo al viewer 3D (hex).
+#   tcp_offset   Posició del TCP (punta útil del capçal) respecte del frame
+#                del link `capcal`. [x, y, z] en metres.
+#   collisions   Llista de primitives geomètriques per a la detecció de col·lisions.
+
+
+default: broca                                  # Capçal per defecte quan s'obre el viewer
+
+capcals:
+
+  - nom: bola
+    descripcio: "Bola"
+    mesh: meshes/capcals/bola.STL
+    visual_rpy: [0.0, 0.0, 0.0]
+    color: "#8e8e93"
+    tcp_offset: [0.04240, 0.0, 0.0]
+    collisions:
+      - type: cylinder
+        p0: [0.0, 0.0, 0.0]
+        p1: [0.0120, 0.0, 0.0]
+        radius: 0.019375
+      - type: cylinder
+        p0: [0.0120, 0.0, 0.0]
+        p1: [0.0216, 0.0, 0.0]
+        radius: 0.0105
+      - type: cylinder
+        p0: [0.0216, 0.0, 0.0]
+        p1: [0.0424, 0.0, 0.0]
+        radius: 0.0025
+      - type: sphere
+        center: [0.0424, 0.0, 0.0]
+        radius: 0.005
+
+
+  - nom: punxo
+    descripcio: "Punxo per marcar"
+    mesh: meshes/capcals/punxo.STL
+    visual_rpy: [0.0, 0.0, 0.0]
+    color: "#f0ad4e"
+    tcp_offset: [0.071, 0.0, 0.0]
+    collisions:
+      - type: cylinder
+        p0: [0.0, 0.0, 0.0]
+        p1: [0.0120, 0.0, 0.0]
+        radius: 0.019375
+      - type: cylinder
+        p0: [0.0120, 0.0, 0.0]
+        p1: [0.0216, 0.0, 0.0]
+        radius: 0.0105
+
+      - type: cylinder
+        p0: [0.0216, 0.0, 0.0]
+        p1: [0.0240, 0.0, 0.0]
+        radius: 0.006
+      - type: cylinder
+        p0: [0.0240, 0.0, 0.0]
+        p1: [0.0360, 0.0, 0.0]
+        radius: 0.00675
+      - type: cylinder
+        p0: [0.0360, 0.0, 0.0]
+        p1: [0.071, 0.0, 0.0]
+        radius: 0.004
+
+
+  - nom: broca
+    descripcio: "Broca per foradar"
+    mesh: meshes/capcals/broca.STL
+    visual_rpy: [0.0, 0.0, 0.0]
+    color: "#f0ad4e"
+    tcp_offset: [0.05159, 0.0, 0.0]
+    collisions:
+      - type: cylinder
+        p0: [0.0, 0.0, 0.0]
+        p1: [0.0120, 0.0, 0.0]
+        radius: 0.019375
+      - type: cylinder
+        p0: [0.0120, 0.0, 0.0]
+        p1: [0.0216, 0.0, 0.0]
+        radius: 0.0105
+      
+      - type: cylinder
+        p0: [0.0216, 0.0, 0.0]
+        p1: [0.0244, 0.0, 0.0]
+        radius: 0.006
+      - type: cylinder
+        p0: [0.0244, 0.0, 0.0]
+        p1: [0.0374, 0.0, 0.0]
+        radius: 0.00675
+      - type: cylinder
+        p0: [0.0374, 0.0, 0.0]
+        p1: [0.05159, 0.0, 0.0]
+        radius: 0.001

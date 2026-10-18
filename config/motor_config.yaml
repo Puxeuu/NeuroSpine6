@@ -1,0 +1,72 @@
+# serial_port NO es fa servir per connectar: el port del robot surt de
+# Preferencies (robot_port, per defecte a preferences.py DEFAULT_PREFS).
+# Es mante perque load_motor_config() espera la clau. Vegeu ventuno/README.md.
+serial_port: tcp://10.42.0.2:5000
+baudrate: 921600
+joints:
+- joint_name: j1
+  motor_id: 1
+  gear_ratio: 101.0
+  encoder_counts_per_rev: 65536
+  direction: 1
+  zero_offset_counts: 7299
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000
+- joint_name: j2
+  motor_id: 2
+  gear_ratio: 101.0
+  encoder_counts_per_rev: 65536
+  direction: 1
+  zero_offset_counts: 4504
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000
+- joint_name: j3
+  motor_id: 3
+  gear_ratio: 101.0
+  encoder_counts_per_rev: 65536
+  direction: -1
+  zero_offset_counts: -301
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000
+- joint_name: j4
+  motor_id: 4
+  gear_ratio: 101.0
+  encoder_counts_per_rev: 65536
+  direction: -1
+  zero_offset_counts: 700
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000
+- joint_name: j5
+  motor_id: 5
+  gear_ratio: 101.0
+  encoder_counts_per_rev: 65536
+  direction: -1
+  zero_offset_counts: -19384
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000
+- joint_name: j6
+  motor_id: 6
+  gear_ratio: 51.0
+  encoder_counts_per_rev: 65536
+  direction: 1
+  zero_offset_counts: 16
+  torque_constant: 0.5
+  current_limit_mA: 5000
+  velocity_limit_counts: 1000
+  default_velocity_counts: 1000
+  default_current_mA: 4000

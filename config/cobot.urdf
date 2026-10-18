@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="cobot">
+<!-- robot significa que a continuació vindrà la descripció d'un robot segons les regles del format URDF -->
+
+<!-- ==========================================================================
+     Aquest URDF conté TOTA la definició del cobot:
+       - Cinemàtica       (links, joints, límits)      → estàndard URDF
+       - Visualització    (meshes)                     → estàndard URDF
+       - Propietats físiques (mass, com, inèrcia)      → estàndard URDF
+       - Motors i fricció (blocs <motor> i <friction>) → EXTENSIÓ pròpia,
+         no forma part del URDF oficial. La llegeix el nostre urdf_loader.py.
+         RViz/Gazebo/MoveIt els ignoraran.
+
+     Valors d'inèrcia i masses: calculats amb SolidWorks (Mass Properties).
+     Unitats: SI (kg, m, kg·m²).
+     ========================================================================== -->
+
+
+<!--  ESTRUCTURA D'UN URDF
+
+robot
+│
+├── link                : Peça rígida del robot.
+│   │
+│   ├── visual          : Com es veu el link.
+│   │   ├── origin      : Posició i orientació del visual.
+│   │   ├── geometry    : Forma del visual.
+│   │   │   ├── mesh    : Fitxer STL/DAE.
+│   │   │   ├── box     : Caixa.
+│   │   │   ├── cylinder: Cilindre.
+│   │   │   └── sphere  : Esfera.
+│   │   └── material    : Color o material.
+│   │       └── color   : Color RGBA.
+│   │
+│   ├── collision       : Geometria de col·lisió.
+│   │   ├── origin      : Posició de la col·lisió.
+│   │   └── geometry    : Forma de col·lisió.
+│   │
+│   └── inertial        : Propietats físiques.
+│       ├── origin      : Centre de masses.
+│       ├── mass        : Massa (kg).
+│       └── inertia     : Matriu d'inèrcia.
+│
+├── joint               : Uneix dos links.
+│   ├── parent          : Link pare.
+│   ├── child           : Link fill.
+│   ├── origin          : Transformació pare → fill.
+│   ├── axis            : Eix de moviment.
+│   ├── limit           : Límits del moviment.
+│   ├── dynamics        : Fricció i amortiment.
+│   ├── calibration     : Calibració.
+│   ├── safety_controller : Seguretat.
+│   └── mimic           : Copia un altre joint. Quan es mou un, l'altre també. 
+│
+├── material            : Material reutilitzable.
+│   └── color           : Color RGBA.
+│
+├── transmission        : Relació motor-joint.
+├── gazebo              : Configuració de Gazebo.
+└── sensor              : Sensors.
+
+
+LINK      = Peça rígida (base_link, arm1...)
+JOINT     = Articulació.
+Un robot sempre estarà format per link -> joint -> link -> joint, etc...
+
+VISUAL    = El que veiem.
+COLLISION = El que toca.
+INERTIAL  = El que pesa.
+-->
+
+
+<!-- ============================================================================= -->
+<!-- Definim el sistema de coordenades global - WORLD -->
+
+  <link name="world" />
+  <joint name="world_to_base" type="fixed">     <!-- enllacem world amb base_link. Mai es mourà perquè li hem dit que sigui fixed -->
+    <parent link="world" />
+    <child link="base_link" />
+    <origin xyz="0 0 0" rpy="0 0 0" />          <!-- base_link està exactament allà mateix que world -->
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- BASE_LINK 
+Apareixen 3 blocs: visual, collision i inertial
+  - Visual: és el que es veu. No fa res, només és visual
+  - Collision: Per calcular col·lisions normalment no es fa servir el propi STL perquè pesa molt, així que s'utilitzen càpsules, cilindres...
+  - Inertial: és el que necessita la dinàmica; massa, centre de masses, moments d'inèrcia...
+-->
+
+  <link name="base_link">   <!-- NO carrega cap STL ni crea cap objecte... Diu que a partir d'ara descriure una peça del robot anomenada base_link -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/base_link.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+
+    <!-- NO POSARÉ COLLISION perquè vull simplificar càlcul. Crearé collision_geometry.yaml amb formes molt senzilles com cilindres, rectangles... -->
+    
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0"/>
+      <inertia ixx="0" iyy="0" izz="0" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+
+<!-- ============================================================================= -->
+<!-- ARM1 -->
+
+  <link name="arm1">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/arm1.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.00002 0.00508 0.06427" rpy="0 0 0"/>
+      <mass value="1.18610"/>
+      <inertia ixx="2.107185e-03" iyy="2.077276e-03" izz="2.393350e-04" ixy="-1.700000e-07" ixz="1.300000e-07" iyz="2.345680e-04"/>
+    </inertial>
+  </link>
+
+
+<!-- Tenim diferents tipus de joints:
+  - FIXED: no es mou
+  - REVOLUTE: gira, es un motor normal
+  - CONTINUOUS: gira infinitament (roda)
+  - PRISMATIC: llisca com un pistó; endavant i enrrere
+ -->
+
+  <joint name="j1" type="revolute">
+    <origin xyz="0.0 0.0 0.0098" rpy="0 0 0" />   <!-- On està el joint respecte al parent -->
+    <parent link="base_link" />
+    <child link="arm1" />
+    <axis xyz="0 0 1" />                          <!-- Al voltant de quin eix gira el motor. Regla mà dreta -->
+    <limit lower="-3.1416" upper="3.1416" />      <!-- podem posar effort ( N*m del motor SitoDrive ) i velocity ( velocitat angular màxima ) -->
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- ARM2 -->
+
+
+  <link name="arm2">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/arm2.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.00000 0.00606 0.06000" rpy="0 0 0"/>
+      <mass value="0.10453"/>
+      <inertia ixx="2.344260e-04" iyy="2.560720e-04" izz="2.407600e-05" ixy="0.000000e+00" ixz="0.000000e+00" iyz="0.000000e+00"/>
+    </inertial>
+  </link>
+
+
+  <joint name="j2" type="revolute">
+    <origin xyz="0 0.035 0.1049" rpy="0 0 0" />
+    <parent link="arm1" />
+    <child link="arm2" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.1416" upper="3.1416" />
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- ARM3 -->
+
+  <link name="arm3">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/arm3.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.00163 -0.02839 0.01695" rpy="0 0 0"/>
+      <mass value="0.87911"/>
+      <inertia ixx="7.074060e-04" iyy="6.839500e-04" izz="1.645790e-04" ixy="-7.809000e-06" ixz="4.734300e-05" iyz="-8.915700e-05"/>
+    </inertial>
+  </link>
+
+
+  <joint name="j3" type="revolute">
+    <origin xyz="0.0 0.0 0.12" rpy="0 0 0" />
+    <parent link="arm2" />
+    <child link="arm3" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.1416" upper="3.1416" />
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- ARM4 
+  - ATENCIÓ: si només volem canviar la direcció de arm4 hem de modificar xyz i rpy de link name="arm4"
+  Però si volem canviar la direcció de tot el següent, és a dir, a partir del j4 per endavant, haurem 
+  de modificar xyz i rpy de joint name="j4"
+-->
+
+  <link name="arm4">
+    <visual>
+      <origin xyz="0 0 0" rpy="3.1416 0 0" />                   
+      <geometry><mesh filename="meshes/arm4.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.04230 -0.00431 -0.00003" rpy="0 0 0"/>
+      <mass value="0.30178"/>
+      <inertia ixx="3.770400e-05" iyy="5.780400e-05" izz="6.233700e-05" ixy="-3.616000e-06" ixz="-3.100000e-08" iyz="-7.000000e-09"/>
+    </inertial>
+  </link>
+
+
+  <joint name="j4" type="revolute">
+    <origin xyz="0.02765 -0.034375 0.0537" rpy="0 0 0" />
+    <parent link="arm3" />
+    <child link="arm4" />
+    <axis xyz="1 0 0" />
+    <limit lower="-3.1416" upper="3.1416" />
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- ARM5 -->
+
+  <link name="arm5">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/arm5.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.06306 -0.02194 -0.00009" rpy="0 0 0"/>
+      <mass value="0.30859"/>
+      <inertia ixx="6.213200e-05" iyy="1.015300e-04" izz="1.345630e-04" ixy="-4.244400e-05" ixz="-7.400000e-08" iyz="1.350000e-07"/>
+    </inertial>
+  </link>
+
+
+  <joint name="j5" type="revolute">
+    <origin xyz="0.045 0.02755 0.0" rpy="0 1.5708 0" />
+    <parent link="arm4" />
+    <child link="arm5" />
+    <axis xyz="0 1 0" />
+    <limit lower="-3.1416" upper="3.1416" />
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- CAPCAL -->
+
+  <link name="capcal">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry><mesh filename="meshes/capcal.STL" /></geometry>
+      <material name=""><color rgba="0.8 0.8 0.8 1" /></material>
+    </visual>
+  
+    <inertial>
+      <origin xyz="0.00964 0.00000 0.00000" rpy="0 0 0"/>
+      <mass value="0.03163"/>
+      <inertia ixx="3.882000e-06" iyy="4.629000e-06" izz="4.629000e-06" ixy="0.000000e+00" ixz="0.000000e+00" iyz="0.000000e+00"/>
+    </inertial>
+  </link>
+
+
+  <joint name="j6" type="revolute">
+    <origin xyz="0.08955 -0.0265 0.0" rpy="0 0 0" />
+    <parent link="arm5" />
+    <child link="capcal" />
+    <axis xyz="1 0 0" />
+    <limit lower="-3.1416" upper="3.1416" />
+  </joint>
+
+
+<!-- ============================================================================= -->
+<!-- TCP_LINK (Tool Center Point)
+Punt final del robot.
+Totes les FK, IK, trajectòries i eines es referiran a aquest punt.
+-->
+
+  <link name="tcp_link"/>
+  <joint name="tcp_joint" type="fixed">
+    <origin xyz="0.04240 0 0" rpy="0 0 0" />
+    <parent link="capcal" />
+    <child link="tcp_link" />
+  </joint>
+
+
+
+
+  <!-- ============================================================================
+       EXTENSIÓ NO-ESTÀNDARD: PROPIETATS DELS MOTORS I FRICCIÓ
+       Aquestes seccions <motor> i <friction> no formen part del URDF oficial.
+       Les llegeix el nostre urdf_loader.py per configurar motor_model.py.
+
+       MOLT IMPORTANT!!!
+        - El valor de kt relaciona el corrent que passa pel motor amb el torque que genera.
+          Si kt alt = molt de parell amb poc corrent. 
+          Si kt baix = necessita molt corrent per generar parell.
+        
+        - El valor del torque_Nm és el parell mínim que has d'aplicar per començar a moure el joint.
+       ============================================================================ -->
+
+
+  <motor joint="j1" type="TA-52" gear_ratio="101" kt="5.19"/>  <!-- Copiat del j2 (mateix motor TA-52 + reductora 101:1). No mesurable directament: eix vertical, gravetat no genera parell   3.25-->
+  <motor joint="j2" type="TA-52" gear_ratio="101" kt="3.39"/>  <!-- CALIBRAT a q=[0,90°,0,0,0,0]: τ_teòric=-2.115 Nm, I_grav=(-1500+200)/2=-650 mA → kt = 2.115/0.650 = 3.25 Nm/A    3.25-->
+  <motor joint="j3" type="TA-52" gear_ratio="101" kt="5.19"/>  <!-- Copiat del j2 (mateix motor). Mesura pròpia a q=[0,0,90°,0,0,0] no fiable perquè τ_teòric era només 0.263 Nm    3.25-->
+  <motor joint="j4" type="TA-40" gear_ratio="101" kt="2.31"/>  <!-- Del datasheet. No mesurable: I_grav=0 (eix alineat amb gravetat en la config utilitzada)    2.31-->
+  <motor joint="j5" type="TA-40" gear_ratio="101" kt="2.31"/>  <!-- Del datasheet. Mesura pròpia no fiable perquè τ_teòric era només 0.222 Nm i I_grav=50 mA (dins l'error de mesura)    2.31-->
+  <motor joint="j6" type="TA-40" gear_ratio="51"  kt="1.17"/>  <!-- Del datasheet. No mesurable: broca massa lleugera (30 g) per generar parell mesurable    1.17-->
+
+
+  <friction joint="j1" torque_Nm="0.0"/>  <!-- CALIBRAT: I_fric = |600-(-600)|/2 = 600 mA → 3.25 × 600/1000 = 1.9500 Nm (config j3=90°). Alternativa a q=0: |550-(-550)|/2 = 550 mA → 3.25 × 550/1000 = 1.7875 Nm. Uso valor conservador -->
+  <friction joint="j2" torque_Nm="2.42"/>  <!-- CALIBRAT: I_fric = |-1500-200|/2 = 850 mA → 3.25 × 850/1000 = 2.7625 Nm -->
+  <friction joint="j3" torque_Nm="0.0"/>  <!-- CALIBRAT: I_fric = |700-(-270)|/2 = 485 mA → 3.25 × 485/1000 = 1.5763 Nm -->
+  <friction joint="j4" torque_Nm="0.0"/>  <!-- CALIBRAT: I_fric = |-700-700|/2 = 700 mA → 2.31 × 700/1000 = 1.6170 Nm -->
+  <friction joint="j5" torque_Nm="0.0"/>  <!-- CALIBRAT: I_fric = |720-(-620)|/2 = 670 mA → 2.31 × 670/1000 = 1.5477 Nm -->
+  <friction joint="j6" torque_Nm="0.0"/>  <!-- CALIBRAT: I_fric = |550-(-550)|/2 = 550 mA → 1.17 × 550/1000 = 0.6435 Nm -->
+
+
+  <gravity xyz="0 0 -9.81"/>
+
+</robot>
