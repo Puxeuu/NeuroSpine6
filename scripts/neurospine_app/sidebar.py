@@ -1,47 +1,37 @@
-"""
-Barra lateral esquerra amb els botons dels workspaces.
-"""
+from qtpy import QtWidgets, QtCore
 
-from qtpy import QtWidgets, QtCore                                              # importem QtWidgets, QtCore des de qtpy
-
-from .theme import (                                                            # importem ( des de .theme
+from .theme import (
     C_BG_SIDEBAR, C_BORDER, C_TEXT, C_TEXT_DIM,
 )
 
 
-# ==============================================================================
-# BOTÓ DE LA BARRA LATERAL
-# ==============================================================================
+class SidebarButton(QtWidgets.QPushButton):
+    WIDTH  = 84
+    HEIGHT = 76
 
-class SidebarButton(QtWidgets.QPushButton):                                     # definim la classe SidebarButton
-    """Botó de la barra lateral: icona a dalt + label a baix."""                # """Botó de la barra lateral: icona a dalt + label a baix."""
+    def __init__(self, icon_text, label, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setFixedSize(self.WIDTH, self.HEIGHT)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
 
-    WIDTH  = 84                                                                 # assignem WIDTH
-    HEIGHT = 76                                                                 # assignem HEIGHT
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 8, 0, 8)
+        layout.setSpacing(4)
+        layout.setAlignment(QtCore.Qt.AlignCenter)
 
-    def __init__(self, icon_text, label, parent=None):                          # definim la funció __init__()
-        super().__init__(parent)                                                # executem super()
-        self.setCheckable(True)                                                 # executem setCheckable()
-        self.setFixedSize(self.WIDTH, self.HEIGHT)                              # executem setFixedSize()
-        self.setCursor(QtCore.Qt.PointingHandCursor)                            # executem setCursor()
+        self.icon_label = QtWidgets.QLabel(icon_text)
+        self.icon_label.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(self.icon_label)
 
-        layout = QtWidgets.QVBoxLayout(self)                                    # layout ← resultat de QVBoxLayout()
-        layout.setContentsMargins(0, 8, 0, 8)                                   # executem setContentsMargins()
-        layout.setSpacing(4)                                                    # executem setSpacing()
-        layout.setAlignment(QtCore.Qt.AlignCenter)                              # executem setAlignment()
+        self.text_label = QtWidgets.QLabel(label)
+        self.text_label.setAlignment(QtCore.Qt.AlignCenter)
+        layout.addWidget(self.text_label)
 
-        self.icon_label = QtWidgets.QLabel(icon_text)                           # self.icon_label ← resultat de QLabel()
-        self.icon_label.setAlignment(QtCore.Qt.AlignCenter)                     # executem setAlignment()
-        layout.addWidget(self.icon_label)                                       # executem addWidget()
+        self._sync_colors()
+        self._apply_style()
 
-        self.text_label = QtWidgets.QLabel(label)                               # self.text_label ← resultat de QLabel()
-        self.text_label.setAlignment(QtCore.Qt.AlignCenter)                     # executem setAlignment()
-        layout.addWidget(self.text_label)                                       # executem addWidget()
-
-        self._sync_colors()                                                     # executem _sync_colors()
-        self._apply_style()                                                     # executem _apply_style()
-
-    def _apply_style(self):                                                     # definim la funció _apply_style()
+    def _apply_style(self):
         self.setStyleSheet(f"""
             SidebarButton {{
                 background-color: transparent;
@@ -58,34 +48,29 @@ class SidebarButton(QtWidgets.QPushButton):                                     
             }}
         """)
 
-    def _sync_colors(self):                                                     # definim la funció _sync_colors()
-        color = C_TEXT if self.isChecked() else C_TEXT_DIM                      # assignem color
-        self.icon_label.setStyleSheet(                                          # executem setStyleSheet()
+    def _sync_colors(self):
+        color = C_TEXT if self.isChecked() else C_TEXT_DIM
+        self.icon_label.setStyleSheet(
             f"color: {color}; background: transparent; border: none; font-size: 22px;"
         )
-        self.text_label.setStyleSheet(                                          # executem setStyleSheet()
+        self.text_label.setStyleSheet(
             f"color: {color}; background: transparent; border: none; "
             f"font-size: 9px; font-weight: 600; letter-spacing: 0.5px;"
         )
 
-    def setChecked(self, checked):                                              # definim la funció setChecked()
-        super().setChecked(checked)                                             # executem super()
-        self._sync_colors()                                                     # executem _sync_colors()
+    def setChecked(self, checked):
+        super().setChecked(checked)
+        self._sync_colors()
 
 
-# ==============================================================================
-# SIDEBAR
-# ==============================================================================
+class Sidebar(QtWidgets.QFrame):
+    WIDTH = 92
+    workspaceRequested = QtCore.Signal(str)
+    settingsRequested  = QtCore.Signal()
 
-class Sidebar(QtWidgets.QFrame):                                                # definim la classe Sidebar
-
-    WIDTH = 92                                                                  # assignem WIDTH
-    workspaceRequested = QtCore.Signal(str)                                     # workspaceRequested ← resultat de Signal()
-    settingsRequested  = QtCore.Signal()                                        # settingsRequested ← resultat de Signal()
-
-    def __init__(self, parent=None):                                            # definim la funció __init__()
-        super().__init__(parent)                                                # executem super()
-        self.setFixedWidth(self.WIDTH)                                          # executem setFixedWidth()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(self.WIDTH)
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {C_BG_SIDEBAR};
@@ -94,44 +79,41 @@ class Sidebar(QtWidgets.QFrame):                                                
             }}
         """)
 
-        layout = QtWidgets.QVBoxLayout(self)                                    # layout ← resultat de QVBoxLayout()
-        layout.setContentsMargins(0, 16, 0, 16)                                 # executem setContentsMargins()
-        layout.setSpacing(2)                                                    # executem setSpacing()
-        layout.setAlignment(QtCore.Qt.AlignTop)                                 # executem setAlignment()
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 16, 0, 16)
+        layout.setSpacing(2)
+        layout.setAlignment(QtCore.Qt.AlignTop)
 
-        self._group = QtWidgets.QButtonGroup(self)                              # self._group ← resultat de QButtonGroup()
-        self._group.setExclusive(True)                                          # executem setExclusive()
-        self._buttons = {}                                                      # assignem self._buttons
+        self._group = QtWidgets.QButtonGroup(self)
+        self._group.setExclusive(True)
+        self._buttons = {}
 
-        # Especificació dels workspaces:
-        #   nom intern      icona     label
-        specs = [                                                               # assignem specs
+        specs = [
             ("planning",     "▦",  "PLANNING"),
             ("robot",        "▤",  "ROBOT"),
             ("registration", "◈",  "REGISTER"),
             ("navigation",   "◎",  "NAVIGATION"),
         ]
-        for name, icon, label in specs:                                         # iterem: name, icon, label in specs
-            btn = SidebarButton(icon, label)                                    # btn ← resultat de SidebarButton()
-            btn.clicked.connect(lambda _checked, n=name: self.workspaceRequested.emit(n))  # btn.clicked.connect(lambda _checked, n ← resultat de emit()
-            self._group.addButton(btn)                                          # executem addButton()
-            self._buttons[name] = btn                                           # assignem self._buttons[name]
-            layout.addWidget(btn)                                               # executem addWidget()
+        for name, icon, label in specs:
+            btn = SidebarButton(icon, label)
+            btn.clicked.connect(lambda _checked, n=name: self.workspaceRequested.emit(n))
+            self._group.addButton(btn)
+            self._buttons[name] = btn
+            layout.addWidget(btn)
 
-        layout.addStretch()                                                     # executem addStretch()
+        layout.addStretch()
 
-        # Separador
-        sep = QtWidgets.QFrame()                                                # sep ← resultat de QFrame()
-        sep.setFixedHeight(1)                                                   # executem setFixedHeight()
+        sep = QtWidgets.QFrame()
+        sep.setFixedHeight(1)
         sep.setStyleSheet(f"background-color: {C_BORDER}; border: none; margin: 0 12px;")
-        layout.addWidget(sep)                                                   # executem addWidget()
+        layout.addWidget(sep)
 
-        # Botó settings
-        settings_btn = SidebarButton("⚙", "SETTINGS")                           # settings_btn ← resultat de SidebarButton()
-        settings_btn.setCheckable(False)                                        # executem setCheckable()
-        settings_btn.clicked.connect(self.settingsRequested.emit)               # executem connect()
-        layout.addWidget(settings_btn)                                          # executem addWidget()
+        settings_btn = SidebarButton("⚙", "SETTINGS")
+        settings_btn.setCheckable(False)
+        settings_btn.clicked.connect(self.settingsRequested.emit)
+        layout.addWidget(settings_btn)
 
-    def set_active(self, name):                                                 # definim la funció set_active()
-        if name in self._buttons:                                               # si name in self._buttons
-            self._buttons[name].setChecked(True)                                # self._buttons[name].setChecked(True)
+    def set_active(self, name):
+        if name in self._buttons:
+            self._buttons[name].setChecked(True)
+

@@ -1,23 +1,7 @@
-"""
-Barra d'accions del RobotWorkspace.
+from qtpy import QtWidgets, QtCore
+from qtpy.QtCore import Qt
 
-Disseny:
-    - Compacte i minimalista.
-    - Tots els botons tenen la mateixa alçada.
-    - Estètica gris / negre coherent amb ViewerDLSPro.
-    - Sense colors blau, verd o vermell.
-    - Selector de capçal integrat en la mateixa barra.
-
-Contingut:
-
-    [ Connectar ] [ Mirror ] [ Home ] [ STOP ]    [ Collisions ]
-    [ Target ]    [ Bola | Punxó | Broca ]
-"""
-
-from qtpy import QtWidgets, QtCore                                              # importem QtWidgets, QtCore des de qtpy
-from qtpy.QtCore import Qt                                                      # importem Qt des de qtpy.QtCore
-
-from ..theme import (                                                           # importem ( des de ..theme
+from ..theme import (
     C_PANEL,
     C_PANEL_ALT,
     C_BORDER,
@@ -29,48 +13,31 @@ from ..theme import (                                                           
 )
 
 
-# ==============================================================================
-# BOTÓ D'ACCIÓ
-# ==============================================================================
+class ActionButton(QtWidgets.QPushButton):
+    HEIGHT = 34
 
-class ActionButton(QtWidgets.QPushButton):                                      # definim la classe ActionButton
-    """
-    Botó compacte i uniforme.
+    def __init__(self, text, icon=None, parent=None):
+        super().__init__(parent)
 
-    Tots els botons comparteixen:
-        - mateixa alçada
-        - mateixa tipografia
-        - mateixa paleta
-        - mateix border-radius
-    """
-
-    HEIGHT = 34                                                                 # assignem HEIGHT
-
-    def __init__(self, text, icon=None, parent=None):                           # definim la funció __init__()
-        super().__init__(parent)                                                # executem super()
-
-        self.setText(                                                           # executem setText()
+        self.setText(
             f"{icon}  {text}" if icon else text
         )
 
-        self.setCursor(                                                         # executem setCursor()
+        self.setCursor(
             Qt.PointingHandCursor
         )
 
-        self.setCheckable(False)                                                # executem setCheckable()
+        self.setCheckable(False)
 
-        self.setFixedHeight(                                                    # executem setFixedHeight()
+        self.setFixedHeight(
             self.HEIGHT
         )
 
-        self.setMinimumWidth(84)                                                # executem setMinimumWidth()
+        self.setMinimumWidth(84)
 
-        self._apply_style()                                                     # executem _apply_style()
+        self._apply_style()
 
-    # --------------------------------------------------------------------------
-
-    def _apply_style(self):                                                     # definim la funció _apply_style()
-
+    def _apply_style(self):
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: {C_PANEL_ALT};
@@ -106,37 +73,25 @@ class ActionButton(QtWidgets.QPushButton):                                      
             }}
         """)
 
-    # --------------------------------------------------------------------------
-
-    def set_label(self, text):                                                  # definim la funció set_label()
-
-        self.setText(text)                                                      # executem setText()
+    def set_label(self, text):
+        self.setText(text)
 
 
-# ==============================================================================
-# BARRA D'ACCIONS
-# ==============================================================================
+class ActionBar(QtWidgets.QFrame):
+    HEIGHT = 52
 
-class ActionBar(QtWidgets.QFrame):                                              # definim la classe ActionBar
-    """
-    Barra horitzontal d'accions del RobotWorkspace.
-    """
+    currentsToggled = QtCore.Signal(bool)
 
-    HEIGHT = 52                                                                 # assignem HEIGHT
+    def __init__(self, viewer, parent=None):
+        super().__init__(parent)
 
-    currentsToggled = QtCore.Signal(bool)                                       # mostra / amaga el gràfic d'intensitats
+        self.viewer = viewer
 
-    def __init__(self, viewer, parent=None):                                    # definim la funció __init__()
-
-        super().__init__(parent)                                                # executem super()
-
-        self.viewer = viewer                                                    # assignem self.viewer
-
-        self.setObjectName(                                                     # executem setObjectName()
+        self.setObjectName(
             "ActionBar"
         )
 
-        self.setFixedHeight(                                                    # executem setFixedHeight()
+        self.setFixedHeight(
             self.HEIGHT
         )
 
@@ -148,79 +103,59 @@ class ActionBar(QtWidgets.QFrame):                                              
             }}
         """)
 
-        # ----------------------------------------------------------------------
-        # LAYOUT
-        # ----------------------------------------------------------------------
+        h = QtWidgets.QHBoxLayout(self)
 
-        h = QtWidgets.QHBoxLayout(self)                                         # h ← resultat de QHBoxLayout()
-
-        h.setContentsMargins(                                                   # executem setContentsMargins()
+        h.setContentsMargins(
             8, 8, 8, 8
         )
 
-        h.setSpacing(6)                                                         # executem setSpacing()
+        h.setSpacing(6)
 
-        # ======================================================================
-        # ESQUERRA — CONTROL DEL ROBOT
-        # ======================================================================
-
-        self.btn_connect = ActionButton(                                        # assignem self.btn_connect
+        self.btn_connect = ActionButton(
             "Connectar"
         )
 
-        self.btn_connect.clicked.connect(                                       # executem connect()
+        self.btn_connect.clicked.connect(
             self._on_connect
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_connect
         )
 
-        # ----------------------------------------------------------------------
-
-        self.btn_mirror = ActionButton(                                         # assignem self.btn_mirror
+        self.btn_mirror = ActionButton(
             "Mirror"
         )
 
-        self.btn_mirror.setEnabled(                                             # executem setEnabled()
+        self.btn_mirror.setEnabled(
             False
         )
 
-        self.btn_mirror.clicked.connect(                                        # executem connect()
+        self.btn_mirror.clicked.connect(
             self._on_mirror
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_mirror
         )
 
-        # ----------------------------------------------------------------------
-
-        self.btn_home = ActionButton(                                           # assignem self.btn_home
+        self.btn_home = ActionButton(
             "Home"
         )
 
-        self.btn_home.clicked.connect(                                          # executem connect()
+        self.btn_home.clicked.connect(
             self._on_home
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_home
         )
 
-        # ----------------------------------------------------------------------
-        # SEPARADOR
-        # ----------------------------------------------------------------------
-
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self._separator()
         )
 
-        # ----------------------------------------------------------------------
-        # STOP
-        # ----------------------------------------------------------------------
-
-        self.btn_stop = ActionButton("STOP")                                    # self.btn_stop ← resultat de ActionButton()
+        self.btn_stop = ActionButton("STOP")
 
         self.btn_stop.setStyleSheet("""
             QPushButton {
@@ -251,114 +186,93 @@ class ActionBar(QtWidgets.QFrame):                                              
             }
         """)
 
-        self.btn_stop.clicked.connect(self._on_stop)                            # executem connect()
+        self.btn_stop.clicked.connect(self._on_stop)
 
-        self.btn_stop.clicked.connect(                                          # executem connect()
+        self.btn_stop.clicked.connect(
             self._on_stop
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_stop
         )
 
-        # ======================================================================
-        # ESPAI
-        # ======================================================================
+        h.addStretch()
 
-        h.addStretch()                                                          # executem addStretch()
-
-        # ======================================================================
-        # DRETA — OPCIONS
-        # ======================================================================
-
-        self.btn_collisions = ActionButton(                                     # assignem self.btn_collisions
+        self.btn_collisions = ActionButton(
             "Collisions"
         )
 
-        self.btn_collisions.setCheckable(                                       # executem setCheckable()
+        self.btn_collisions.setCheckable(
             True
         )
 
-        chk = getattr(                                                          # assignem chk
+        chk = getattr(
             viewer,
             "chk_collisions",
             None
         )
 
-        if chk is not None:                                                     # si chk is not None
-
-            self.btn_collisions.setChecked(                                     # executem setChecked()
+        if chk is not None:
+            self.btn_collisions.setChecked(
                 chk.isChecked()
             )
 
-        self.btn_collisions.clicked.connect(                                    # executem connect()
+        self.btn_collisions.clicked.connect(
             self._on_toggle_collisions
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_collisions
         )
 
-        # ----------------------------------------------------------------------
-
-        self.btn_target = ActionButton(                                         # assignem self.btn_target
+        self.btn_target = ActionButton(
             "Target"
         )
 
-        self.btn_target.setCheckable(                                           # executem setCheckable()
+        self.btn_target.setCheckable(
             True
         )
 
-        chk_target = getattr(                                                   # assignem chk_target
+        chk_target = getattr(
             viewer,
             "chk_target",
             None
         )
 
-        if chk_target is not None:                                              # si chk_target is not None
-
-            self.btn_target.setChecked(                                         # executem setChecked()
+        if chk_target is not None:
+            self.btn_target.setChecked(
                 chk_target.isChecked()
             )
 
-        self.btn_target.clicked.connect(                                        # executem connect()
+        self.btn_target.clicked.connect(
             self._on_toggle_target
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_target
         )
 
-        # ----------------------------------------------------------------------
-
-        self.btn_currents = ActionButton(                                       # gràfic d'intensitats dels motors
+        self.btn_currents = ActionButton(
             "Intensitats"
         )
 
-        self.btn_currents.setCheckable(True)                                    # executem setCheckable()
-        self.btn_currents.setToolTip("Gràfic del corrent de tots els motors (I)")  # executem setToolTip()
+        self.btn_currents.setCheckable(True)
+        self.btn_currents.setToolTip("Gràfic del corrent de tots els motors (I)")
 
-        self.btn_currents.toggled.connect(                                      # executem connect()
+        self.btn_currents.toggled.connect(
             self.currentsToggled.emit
         )
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.btn_currents
         )
 
-        # ======================================================================
-        # SELECTOR DE CAPÇAL
-        # ======================================================================
+        self.capcal_frame = QtWidgets.QFrame()
 
-        self.capcal_frame = QtWidgets.QFrame()                                  # self.capcal_frame ← resultat de QFrame()
-
-        self.capcal_frame.setFixedHeight(                                       # executem setFixedHeight()
+        self.capcal_frame.setFixedHeight(
             ActionButton.HEIGHT
         )
 
-        # Vora VERMELLA perquè l'operador vegi clarament aquest selector:
-        # cal confirmar quin TCP (bola/punxó/broca) està muntat físicament
-        # al robot. S'evita així haver de mostrar un modal al principi.
         self.capcal_frame.setStyleSheet(f"""
             QFrame {{
                 background-color: {C_PANEL_ALT};
@@ -367,46 +281,43 @@ class ActionBar(QtWidgets.QFrame):                                              
             }}
         """)
 
-        capcal_layout = QtWidgets.QHBoxLayout(                                  # assignem capcal_layout
+        capcal_layout = QtWidgets.QHBoxLayout(
             self.capcal_frame
         )
 
-        capcal_layout.setContentsMargins(                                       # executem setContentsMargins()
+        capcal_layout.setContentsMargins(
             3, 3, 3, 3
         )
 
-        capcal_layout.setSpacing(                                               # executem setSpacing()
+        capcal_layout.setSpacing(
             2
         )
 
-        capcal_info = {                                                         # assignem capcal_info
+        capcal_info = {
             "bola": "Bola",
             "punxo": "Punxó",
             "broca": "Broca",
         }
 
-        self.capcal_buttons = {}                                                # assignem self.capcal_buttons
+        self.capcal_buttons = {}
 
-        for cap_id, label in capcal_info.items():                               # iterem: cap_id, label in capcal_info.items()
-
-            button = QtWidgets.QPushButton(                                     # assignem button
+        for cap_id, label in capcal_info.items():
+            button = QtWidgets.QPushButton(
                 label
             )
 
-            button.setCheckable(                                                # executem setCheckable()
+            button.setCheckable(
                 True
             )
 
-            button.setFixedHeight(                                              # executem setFixedHeight()
+            button.setFixedHeight(
                 26
             )
 
-            button.setCursor(                                                   # executem setCursor()
+            button.setCursor(
                 Qt.PointingHandCursor
             )
 
-            # Botó actiu (checked) també en vermell, consistent amb la vora
-            # del recuadre: així es veu clarament quin capçal està seleccionat.
             button.setStyleSheet(f"""
                 QPushButton {{
                     background-color: transparent;
@@ -429,87 +340,71 @@ class ActionBar(QtWidgets.QFrame):                                              
                 }}
             """)
 
-            button.clicked.connect(                                             # executem connect()
+            button.clicked.connect(
                 lambda checked,
                 cid=cap_id:
                 self._on_capcal_button_clicked(cid)
             )
 
-            self.capcal_buttons[                                                # self.capcal_buttons[
+            self.capcal_buttons[
                 cap_id
             ] = button
 
-            capcal_layout.addWidget(                                            # executem addWidget()
+            capcal_layout.addWidget(
                 button
             )
 
-        # ----------------------------------------------------------------------
-        # CAPÇAL ACTIU INICIAL
-        # ----------------------------------------------------------------------
-
-        manager = getattr(                                                      # assignem manager
+        manager = getattr(
             self.viewer,
             "capcal_manager",
             None
         )
 
-        if manager is not None:                                                 # si manager is not None
-
-            active = getattr(                                                   # assignem active
+        if manager is not None:
+            active = getattr(
                 manager,
                 "active_nom",
                 "bola"
             )
 
-            if active in self.capcal_buttons:                                   # si active in self.capcal_buttons
-
-                self.capcal_buttons[                                            # self.capcal_buttons[
+            if active in self.capcal_buttons:
+                self.capcal_buttons[
                     active
                 ].setChecked(True)
 
-        else:                                                                   # en cas contrari
-
-            self.capcal_buttons[                                                # self.capcal_buttons[
+        else:
+            self.capcal_buttons[
                 "bola"
             ].setChecked(True)
 
-        h.addWidget(                                                            # executem addWidget()
+        h.addWidget(
             self.capcal_frame
         )
 
-        # ======================================================================
-        # TIMER DE SINCRONITZACIÓ
-        # ======================================================================
-
-        self._timer = QtCore.QTimer(                                            # assignem self._timer
+        self._timer = QtCore.QTimer(
             self
         )
 
-        self._timer.timeout.connect(                                            # executem connect()
+        self._timer.timeout.connect(
             self._refresh_state
         )
 
-        self._timer.start(                                                      # executem start()
+        self._timer.start(
             400
         )
 
-    # ==========================================================================
-    # HELPERS
-    # ==========================================================================
+    def _separator(self):
+        sep = QtWidgets.QFrame()
 
-    def _separator(self):                                                       # definim la funció _separator()
-
-        sep = QtWidgets.QFrame()                                                # sep ← resultat de QFrame()
-
-        sep.setFixedWidth(                                                      # executem setFixedWidth()
+        sep.setFixedWidth(
             1
         )
 
-        sep.setFixedHeight(                                                     # executem setFixedHeight()
+        sep.setFixedHeight(
             24
         )
 
-        sep.setStyleSheet(                                                      # executem setStyleSheet()
+        sep.setStyleSheet(
             f"""
             QFrame {{
                 background-color: {C_BORDER};
@@ -518,271 +413,204 @@ class ActionBar(QtWidgets.QFrame):                                              
             """
         )
 
-        return sep                                                              # retornem: sep
+        return sep
 
-    # ==========================================================================
-    # CAPÇALS
-    # ==========================================================================
-
-    def _on_capcal_button_clicked(                                              # definim la funció _on_capcal_button_clicked()
+    def _on_capcal_button_clicked(
         self,
         cap_id
     ):
-
-        # Només un capçal actiu
-        for cid, button in self.capcal_buttons.items():                         # iterem: cid, button in self.capcal_buttons.it...
-
-            button.setChecked(                                                  # executem setChecked()
+        for cid, button in self.capcal_buttons.items():
+            button.setChecked(
                 cid == cap_id
             )
 
-        # Aplica el canvi al selector intern
-        selector = getattr(                                                     # assignem selector
+        selector = getattr(
             self.viewer,
             "capcal_selector",
             None
         )
 
-        if selector is not None:                                                # si selector is not None
-
-            if hasattr(                                                         # si hasattr(
+        if selector is not None:
+            if hasattr(
                 selector,
                 "cards"
             ):
-
-                try:                                                            # intentem el bloc següent
-
-                    for card_id, card in selector.cards.items():                # iterem: card_id, card in selector.cards.items()
-
-                        card.setChecked(                                        # executem setChecked()
+                try:
+                    for card_id, card in selector.cards.items():
+                        card.setChecked(
                             card_id == cap_id
                         )
 
-                except Exception as e:                                          # capturem excepció: Exception as e
-
-                    print(                                                      # executem print()
+                except Exception as e:
+                    print(
                         f"[actionbar] capcal cards: {e}"
                     )
 
-            if hasattr(                                                         # si hasattr(
+            if hasattr(
                 selector,
                 "capcalChanged"
             ):
-
-                try:                                                            # intentem el bloc següent
-
-                    selector.capcalChanged.emit(                                # executem emit()
+                try:
+                    selector.capcalChanged.emit(
                         cap_id
                     )
 
-                except Exception as e:                                          # capturem excepció: Exception as e
-
-                    print(                                                      # executem print()
+                except Exception as e:
+                    print(
                         f"[actionbar] capcal switch: {e}"
                     )
 
-    # ==========================================================================
-    # BOTONS PRINCIPALS
-    # ==========================================================================
-
-    def _on_connect(self):                                                      # definim la funció _on_connect()
-
-        button = getattr(                                                       # assignem button
+    def _on_connect(self):
+        button = getattr(
             self.viewer,
             "btn_connect",
             None
         )
 
-        if button is None:                                                      # si button is None
-            return                                                              # retornem sense valor
+        if button is None:
+            return
 
-        button.setChecked(                                                      # executem setChecked()
+        button.setChecked(
             not button.isChecked()
         )
 
-        if hasattr(                                                             # si hasattr(
+        if hasattr(
             self.viewer,
             "_on_connect_motors"
         ):
+            self.viewer._on_connect_motors()
 
-            self.viewer._on_connect_motors()                                    # executem _on_connect_motors()
-
-    # --------------------------------------------------------------------------
-
-    def _on_mirror(self):                                                       # definim la funció _on_mirror()
-
-        button = getattr(                                                       # assignem button
+    def _on_mirror(self):
+        button = getattr(
             self.viewer,
             "btn_mirror",
             None
         )
 
-        if button is None:                                                      # si button is None
-            return                                                              # retornem sense valor
+        if button is None:
+            return
 
-        if not button.isEnabled():                                              # si not button.isEnabled()
-            return                                                              # retornem sense valor
+        if not button.isEnabled():
+            return
 
-        button.setChecked(                                                      # executem setChecked()
+        button.setChecked(
             not button.isChecked()
         )
 
-        if hasattr(                                                             # si hasattr(
+        if hasattr(
             self.viewer,
             "_on_mirror_toggle"
         ):
+            self.viewer._on_mirror_toggle()
 
-            self.viewer._on_mirror_toggle()                                     # executem _on_mirror_toggle()
-
-    # --------------------------------------------------------------------------
-
-    def _on_home(self):                                                         # definim la funció _on_home()
-
-        if hasattr(                                                             # si hasattr(
+    def _on_home(self):
+        if hasattr(
             self.viewer,
             "_on_move_to_zero"
         ):
+            self.viewer._on_move_to_zero()
 
-            self.viewer._on_move_to_zero()                                      # executem _on_move_to_zero()
-
-    # --------------------------------------------------------------------------
-
-    def _on_stop(self):                                                         # definim la funció _on_stop()
-
-        if hasattr(                                                             # si hasattr(
+    def _on_stop(self):
+        if hasattr(
             self.viewer,
             "_on_stop"
         ):
+            self.viewer._on_stop()
 
-            self.viewer._on_stop()                                              # executem _on_stop()
-
-    # ==========================================================================
-    # TOGGLES
-    # ==========================================================================
-
-    def _on_toggle_collisions(self):                                            # definim la funció _on_toggle_collisions()
-
-        checkbox = getattr(                                                     # assignem checkbox
+    def _on_toggle_collisions(self):
+        checkbox = getattr(
             self.viewer,
             "chk_collisions",
             None
         )
 
-        if checkbox is None:                                                    # si checkbox is None
-            return                                                              # retornem sense valor
+        if checkbox is None:
+            return
 
-        checkbox.setChecked(                                                    # executem setChecked()
+        checkbox.setChecked(
             self.btn_collisions.isChecked()
         )
 
-    # --------------------------------------------------------------------------
-
-    def _on_toggle_target(self):                                                # definim la funció _on_toggle_target()
-
-        checkbox = getattr(                                                     # assignem checkbox
+    def _on_toggle_target(self):
+        checkbox = getattr(
             self.viewer,
             "chk_target",
             None
         )
 
-        if checkbox is None:                                                    # si checkbox is None
-            return                                                              # retornem sense valor
+        if checkbox is None:
+            return
 
-        value = self.btn_target.isChecked()                                     # value ← resultat de isChecked()
+        value = self.btn_target.isChecked()
 
-        checkbox.setChecked(                                                    # executem setChecked()
+        checkbox.setChecked(
             value
         )
 
-        if hasattr(                                                             # si hasattr(
+        if hasattr(
             self.viewer,
             "_on_target_visibility"
         ):
-
-            self.viewer._on_target_visibility(                                  # executem _on_target_visibility()
+            self.viewer._on_target_visibility(
                 value
             )
 
-    # ==========================================================================
-    # SINCRONITZACIÓ
-    # ==========================================================================
-
-    def _refresh_state(self):                                                   # definim la funció _refresh_state()
-
-        # ----------------------------------------------------------------------
-        # CONNECT
-        # ----------------------------------------------------------------------
-
-        button = getattr(                                                       # assignem button
+    def _refresh_state(self):
+        button = getattr(
             self.viewer,
             "btn_connect",
             None
         )
 
-        if button is not None:                                                  # si button is not None
+        if button is not None:
+            connected = button.isChecked()
 
-            connected = button.isChecked()                                      # connected ← resultat de isChecked()
-
-            self.btn_connect.setText(                                           # executem setText()
+            self.btn_connect.setText(
                 "Desconnectar"
                 if connected
                 else "Connectar"
             )
 
-            self.btn_mirror.setEnabled(                                         # executem setEnabled()
+            self.btn_mirror.setEnabled(
                 button.isChecked()
             )
 
-        # ----------------------------------------------------------------------
-        # MIRROR
-        # ----------------------------------------------------------------------
-
-        mirror = getattr(                                                       # assignem mirror
+        mirror = getattr(
             self.viewer,
             "btn_mirror",
             None
         )
 
-        if mirror is not None:                                                  # si mirror is not None
-
-            self.btn_mirror.setText(                                            # executem setText()
+        if mirror is not None:
+            self.btn_mirror.setText(
                 "Mirror ON"
                 if mirror.isChecked()
                 else "Mirror"
             )
 
-            self.btn_mirror.setChecked(                                         # executem setChecked()
+            self.btn_mirror.setChecked(
                 mirror.isChecked()
             )
 
-        # ----------------------------------------------------------------------
-        # COLLISIONS
-        # ----------------------------------------------------------------------
-
-        collisions = getattr(                                                   # assignem collisions
+        collisions = getattr(
             self.viewer,
             "chk_collisions",
             None
         )
 
-        if collisions is not None:                                              # si collisions is not None
-
-            self.btn_collisions.setChecked(                                     # executem setChecked()
+        if collisions is not None:
+            self.btn_collisions.setChecked(
                 collisions.isChecked()
             )
 
-        # ----------------------------------------------------------------------
-        # TARGET
-        # ----------------------------------------------------------------------
-
-        target = getattr(                                                       # assignem target
+        target = getattr(
             self.viewer,
             "chk_target",
             None
         )
 
-        if target is not None:                                                  # si target is not None
-
-            self.btn_target.setChecked(                                         # executem setChecked()
+        if target is not None:
+            self.btn_target.setChecked(
                 target.isChecked()
             )
+

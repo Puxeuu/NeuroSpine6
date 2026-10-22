@@ -1,17 +1,7 @@
-"""
-Panell de control manual del motor J6 (broca).
+from qtpy import QtWidgets, QtCore
+from qtpy.QtCore import Qt
 
-Disseny:
-    - Minimalista
-    - Gris fosc, coherent amb ViewerDLSPro
-    - Sense colors d'estat
-    - Sense elements decoratius innecessaris
-"""
-
-from qtpy import QtWidgets, QtCore                                              # importem QtWidgets, QtCore des de qtpy
-from qtpy.QtCore import Qt                                                      # importem Qt des de qtpy.QtCore
-
-from ..theme import (                                                           # importem ( des de ..theme
+from ..theme import (
     C_PANEL,
     C_PANEL_ALT,
     C_BORDER,
@@ -25,45 +15,28 @@ from ..theme import (                                                           
 )
 
 
-# =============================================================================
-# RANGS
-# =============================================================================
+MIN_VELOCITY = -3000
+MAX_VELOCITY = 3000
 
-MIN_VELOCITY = -3000                                                            # assignem MIN_VELOCITY
-MAX_VELOCITY = 3000                                                             # assignem MAX_VELOCITY
+MIN_CURRENT_MA = 100
+MAX_CURRENT_MA = 5000
 
-MIN_CURRENT_MA = 100                                                            # assignem MIN_CURRENT_MA
-MAX_CURRENT_MA = 5000                                                           # assignem MAX_CURRENT_MA
-
-DEFAULT_CURRENT_MA = 2000                                                       # assignem DEFAULT_CURRENT_MA
+DEFAULT_CURRENT_MA = 2000
 
 
-# =============================================================================
-# PANELL J6
-# =============================================================================
+class J6ControlPanel(QtWidgets.QFrame):
+    velocityRequested = QtCore.Signal(int, int)
+    torqueRequested = QtCore.Signal(int)
+    stopRequested = QtCore.Signal()
 
-class J6ControlPanel(QtWidgets.QFrame):                                         # definim la classe J6ControlPanel
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-    velocityRequested = QtCore.Signal(int, int)                                 # velocityRequested ← resultat de Signal()
-    torqueRequested = QtCore.Signal(int)                                        # torqueRequested ← resultat de Signal()
-    stopRequested = QtCore.Signal()                                             # stopRequested ← resultat de Signal()
+        self.mode = "torque"
+        self.running = False
 
-    def __init__(self, parent=None):                                            # definim la funció __init__()
-        super().__init__(parent)                                                # executem super()
-
-        # ---------------------------------------------------------------------
-        # ESTAT
-        # ---------------------------------------------------------------------
-
-        self.mode = "torque"                                                    # únic mode disponible: TORQUE (control per corrent)
-        self.running = False                                                    # assignem self.running
-
-        self.setObjectName("J6ControlPanel")                                    # executem setObjectName()
-        self.setFixedWidth(280)                                                 # executem setFixedWidth()
-
-        # ---------------------------------------------------------------------
-        # ESTIL GENERAL
-        # ---------------------------------------------------------------------
+        self.setObjectName("J6ControlPanel")
+        self.setFixedWidth(280)
 
         self.setStyleSheet(f"""
             QFrame#J6ControlPanel {{
@@ -73,19 +46,11 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        # ---------------------------------------------------------------------
-        # LAYOUT
-        # ---------------------------------------------------------------------
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
 
-        layout = QtWidgets.QVBoxLayout(self)                                    # layout ← resultat de QVBoxLayout()
-        layout.setContentsMargins(18, 16, 18, 16)                               # executem setContentsMargins()
-        layout.setSpacing(10)                                                   # executem setSpacing()
-
-        # =====================================================================
-        # TITOL
-        # =====================================================================
-
-        self.title = QtWidgets.QLabel("BROCA J6")                               # self.title ← resultat de QLabel()
+        self.title = QtWidgets.QLabel("BROCA J6")
 
         self.title.setStyleSheet(f"""
             QLabel {{
@@ -98,147 +63,117 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        layout.addWidget(self.title)                                            # executem addWidget()
+        layout.addWidget(self.title)
 
-        # =====================================================================
-        # MODE — Panell simplificat: NOMÉS TORQUE (control per corrent).
-        # Els botons VELOCITY/TORQUE es creen igual per no trencar codi que
-        # els referencia, però NO s'afegeixen al layout (invisibles).
-        # =====================================================================
+        self.btn_vel = self._make_mode_button("VELOCITY")
+        self.btn_tor = self._make_mode_button("TORQUE")
 
-        self.btn_vel = self._make_mode_button("VELOCITY")                       # self.btn_vel ← resultat de _make_mode_button()
-        self.btn_tor = self._make_mode_button("TORQUE")                         # self.btn_tor ← resultat de _make_mode_button()
+        self.btn_tor.setChecked(True)
 
-        # Deixem TORQUE marcat des del principi (és l'únic mode disponible)
-        self.btn_tor.setChecked(True)                                           # executem setChecked()
-
-        self.btn_vel.clicked.connect(                                           # executem connect()
+        self.btn_vel.clicked.connect(
             lambda: self._set_mode("velocity")
         )
 
-        self.btn_tor.clicked.connect(                                           # executem connect()
+        self.btn_tor.clicked.connect(
             lambda: self._set_mode("torque")
         )
 
-        self.mode_group = QtWidgets.QButtonGroup(self)                          # self.mode_group ← resultat de QButtonGroup()
-        self.mode_group.setExclusive(True)                                      # executem setExclusive()
-        self.mode_group.addButton(self.btn_vel)                                 # executem addButton()
-        self.mode_group.addButton(self.btn_tor)                                 # executem addButton()
+        self.mode_group = QtWidgets.QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        self.mode_group.addButton(self.btn_vel)
+        self.mode_group.addButton(self.btn_tor)
 
-        # NO afegim mode_row al layout: els botons queden ocults
-        self.btn_vel.hide()                                                     # amaguem VELOCITY
-        self.btn_tor.hide()                                                     # amaguem TORQUE (el mode és fix)
+        self.btn_vel.hide()
+        self.btn_tor.hide()
 
-        # =====================================================================
-        # VELOCITY
-        # =====================================================================
+        self.vel_panel = QtWidgets.QWidget()
 
-        self.vel_panel = QtWidgets.QWidget()                                    # self.vel_panel ← resultat de QWidget()
+        vp = QtWidgets.QVBoxLayout(self.vel_panel)
+        vp.setContentsMargins(0, 4, 0, 0)
+        vp.setSpacing(6)
 
-        vp = QtWidgets.QVBoxLayout(self.vel_panel)                              # vp ← resultat de QVBoxLayout()
-        vp.setContentsMargins(0, 4, 0, 0)                                       # executem setContentsMargins()
-        vp.setSpacing(6)                                                        # executem setSpacing()
-
-        # Label
-        vp.addWidget(                                                           # executem addWidget()
+        vp.addWidget(
             self._make_caption("VELOCITAT")
         )
 
-        # Valor
-        self.vel_value = self._make_value("0")                                  # self.vel_value ← resultat de _make_value()
-        vp.addWidget(self.vel_value)                                            # executem addWidget()
+        self.vel_value = self._make_value("0")
+        vp.addWidget(self.vel_value)
 
-        # Slider
-        self.slider_vel = self._make_slider(                                    # assignem self.slider_vel
+        self.slider_vel = self._make_slider(
             MIN_VELOCITY,
             MAX_VELOCITY,
             0,
             500
         )
 
-        self.slider_vel.valueChanged.connect(                                   # executem connect()
+        self.slider_vel.valueChanged.connect(
             self._on_vel_slider
         )
 
-        vp.addWidget(self.slider_vel)                                           # executem addWidget()
+        vp.addWidget(self.slider_vel)
 
-        # -------------------------------------------------------------
-        # CORRENT MAX
-        # -------------------------------------------------------------
+        vp.addSpacing(4)
 
-        vp.addSpacing(4)                                                        # executem addSpacing()
-
-        vp.addWidget(                                                           # executem addWidget()
+        vp.addWidget(
             self._make_caption("CORRENT MÀXIM")
         )
 
-        self.vel_current_value = self._make_value(                              # assignem self.vel_current_value
+        self.vel_current_value = self._make_value(
             str(DEFAULT_CURRENT_MA),
             small=True
         )
 
-        vp.addWidget(self.vel_current_value)                                    # executem addWidget()
+        vp.addWidget(self.vel_current_value)
 
-        self.slider_vel_current = self._make_slider(                            # assignem self.slider_vel_current
+        self.slider_vel_current = self._make_slider(
             MIN_CURRENT_MA,
             MAX_CURRENT_MA,
             DEFAULT_CURRENT_MA,
             1000
         )
 
-        self.slider_vel_current.valueChanged.connect(                           # executem connect()
+        self.slider_vel_current.valueChanged.connect(
             self._on_vel_current_slider
         )
 
-        vp.addWidget(self.slider_vel_current)                                   # executem addWidget()
+        vp.addWidget(self.slider_vel_current)
 
-        layout.addWidget(self.vel_panel)                                        # executem addWidget()
-        self.vel_panel.hide()                                                   # amagat: mode VELOCITY no disponible
+        layout.addWidget(self.vel_panel)
+        self.vel_panel.hide()
 
-        # =====================================================================
-        # TORQUE
-        # =====================================================================
+        self.tor_panel = QtWidgets.QWidget()
 
-        self.tor_panel = QtWidgets.QWidget()                                    # self.tor_panel ← resultat de QWidget()
+        tp = QtWidgets.QVBoxLayout(self.tor_panel)
+        tp.setContentsMargins(0, 4, 0, 0)
+        tp.setSpacing(6)
 
-        tp = QtWidgets.QVBoxLayout(self.tor_panel)                              # tp ← resultat de QVBoxLayout()
-        tp.setContentsMargins(0, 4, 0, 0)                                       # executem setContentsMargins()
-        tp.setSpacing(6)                                                        # executem setSpacing()
-
-        tp.addWidget(                                                           # executem addWidget()
+        tp.addWidget(
             self._make_caption("CORRENT")
         )
 
-        self.tor_value = self._make_value("0")                                  # self.tor_value ← resultat de _make_value()
-        tp.addWidget(self.tor_value)                                            # executem addWidget()
+        self.tor_value = self._make_value("0")
+        tp.addWidget(self.tor_value)
 
-        self.slider_tor = self._make_slider(                                    # assignem self.slider_tor
+        self.slider_tor = self._make_slider(
             -MAX_CURRENT_MA,
             MAX_CURRENT_MA,
             0,
             1000
         )
 
-        self.slider_tor.valueChanged.connect(                                   # executem connect()
+        self.slider_tor.valueChanged.connect(
             self._on_tor_slider
         )
 
-        tp.addWidget(self.slider_tor)                                           # executem addWidget()
+        tp.addWidget(self.slider_tor)
 
-        layout.addWidget(self.tor_panel)                                        # executem addWidget()
+        layout.addWidget(self.tor_panel)
 
-        # tor_panel visible per defecte: només aquest mode està disponible
-        # (no cridem .hide(), a diferència de vel_panel)
-
-        # =====================================================================
-        # RPM
-        # =====================================================================
-
-        self.lbl_rpm = QtWidgets.QLabel(                                        # assignem self.lbl_rpm
+        self.lbl_rpm = QtWidgets.QLabel(
             "0 RPM"
         )
 
-        self.lbl_rpm.setAlignment(Qt.AlignCenter)                               # executem setAlignment()
+        self.lbl_rpm.setAlignment(Qt.AlignCenter)
 
         self.lbl_rpm.setStyleSheet(f"""
             QLabel {{
@@ -250,47 +185,34 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        layout.addWidget(self.lbl_rpm)                                          # executem addWidget()
-        self.lbl_rpm.hide()                                                     # amagat: era indicador del mode velocity
+        layout.addWidget(self.lbl_rpm)
+        self.lbl_rpm.hide()
 
-        # =====================================================================
-        # BOTONS
-        # =====================================================================
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.setSpacing(6)
 
-        buttons = QtWidgets.QHBoxLayout()                                       # buttons ← resultat de QHBoxLayout()
-        buttons.setSpacing(6)                                                   # executem setSpacing()
+        self.btn_start = self._make_action_button("START")
+        self.btn_stop = self._make_action_button("STOP")
 
-        self.btn_start = self._make_action_button("START")                      # self.btn_start ← resultat de _make_action_button()
-        self.btn_stop = self._make_action_button("STOP")                        # self.btn_stop ← resultat de _make_action_button()
-
-        self.btn_start.clicked.connect(                                         # executem connect()
+        self.btn_start.clicked.connect(
             self._on_start
         )
 
-        self.btn_stop.clicked.connect(                                          # executem connect()
+        self.btn_stop.clicked.connect(
             self._on_stop
         )
 
-        self.btn_stop.setEnabled(False)                                         # executem setEnabled()
+        self.btn_stop.setEnabled(False)
 
-        buttons.addWidget(self.btn_start)                                       # executem addWidget()
-        buttons.addWidget(self.btn_stop)                                        # executem addWidget()
+        buttons.addWidget(self.btn_start)
+        buttons.addWidget(self.btn_stop)
 
-        layout.addLayout(buttons)                                               # executem addLayout()
+        layout.addLayout(buttons)
 
-        # ---------------------------------------------------------------------
-        # INIT
-        # ---------------------------------------------------------------------
+        self._update_rpm_label()
 
-        self._update_rpm_label()                                                # executem _update_rpm_label()
-
-    # =========================================================================
-    # HELPERS
-    # =========================================================================
-
-    def _make_caption(self, text):                                              # definim la funció _make_caption()
-
-        label = QtWidgets.QLabel(text)                                          # label ← resultat de QLabel()
+    def _make_caption(self, text):
+        label = QtWidgets.QLabel(text)
 
         label.setStyleSheet(f"""
             QLabel {{
@@ -303,17 +225,14 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        return label                                                            # retornem: label
+        return label
 
-    # -------------------------------------------------------------------------
+    def _make_value(self, text, small=False):
+        label = QtWidgets.QLabel(text)
 
-    def _make_value(self, text, small=False):                                   # definim la funció _make_value()
+        label.setAlignment(Qt.AlignCenter)
 
-        label = QtWidgets.QLabel(text)                                          # label ← resultat de QLabel()
-
-        label.setAlignment(Qt.AlignCenter)                                      # executem setAlignment()
-
-        size = 19 if small else 24                                              # assignem size
+        size = 19 if small else 24
 
         label.setStyleSheet(f"""
             QLabel {{
@@ -326,16 +245,13 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        return label                                                            # retornem: label
+        return label
 
-    # -------------------------------------------------------------------------
+    def _make_mode_button(self, text):
+        button = QtWidgets.QPushButton(text)
 
-    def _make_mode_button(self, text):                                          # definim la funció _make_mode_button()
-
-        button = QtWidgets.QPushButton(text)                                    # button ← resultat de QPushButton()
-
-        button.setCheckable(True)                                               # executem setCheckable()
-        button.setMinimumHeight(28)                                             # executem setMinimumHeight()
+        button.setCheckable(True)
+        button.setMinimumHeight(28)
 
         button.setStyleSheet(f"""
             QPushButton {{
@@ -360,15 +276,12 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        return button                                                           # retornem: button
+        return button
 
-    # -------------------------------------------------------------------------
+    def _make_action_button(self, text):
+        button = QtWidgets.QPushButton(text)
 
-    def _make_action_button(self, text):                                        # definim la funció _make_action_button()
-
-        button = QtWidgets.QPushButton(text)                                    # button ← resultat de QPushButton()
-
-        button.setMinimumHeight(34)                                             # executem setMinimumHeight()
+        button.setMinimumHeight(34)
 
         button.setStyleSheet(f"""
             QPushButton {{
@@ -397,32 +310,29 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        return button                                                           # retornem: button
+        return button
 
-    # -------------------------------------------------------------------------
-
-    def _make_slider(                                                           # definim la funció _make_slider()
+    def _make_slider(
         self,
         minimum,
         maximum,
         value,
         tick_interval
     ):
+        slider = QtWidgets.QSlider(Qt.Horizontal)
 
-        slider = QtWidgets.QSlider(Qt.Horizontal)                               # slider ← resultat de QSlider()
-
-        slider.setRange(                                                        # executem setRange()
+        slider.setRange(
             minimum,
             maximum
         )
 
-        slider.setValue(value)                                                  # executem setValue()
+        slider.setValue(value)
 
-        slider.setTickPosition(                                                 # executem setTickPosition()
+        slider.setTickPosition(
             QtWidgets.QSlider.TicksBelow
         )
 
-        slider.setTickInterval(                                                 # executem setTickInterval()
+        slider.setTickInterval(
             tick_interval
         )
 
@@ -467,156 +377,107 @@ class J6ControlPanel(QtWidgets.QFrame):                                         
             }}
         """)
 
-        return slider                                                           # retornem: slider
+        return slider
 
-    # =========================================================================
-    # VELOCITY
-    # =========================================================================
-
-    def _on_vel_slider(self, value):                                            # definim la funció _on_vel_slider()
-
-        if value > 0:                                                           # si value > 0
+    def _on_vel_slider(self, value):
+        if value > 0:
             text = f"+{value}"
-        else:                                                                   # en cas contrari
-            text = str(value)                                                   # text ← resultat de str()
+        else:
+            text = str(value)
 
-        self.vel_value.setText(text)                                            # executem setText()
+        self.vel_value.setText(text)
 
-        self._update_rpm_label()                                                # executem _update_rpm_label()
+        self._update_rpm_label()
 
-        if self.running and self.mode == "velocity":                            # si self.running and self.mode == "velocity"
-            self._emit_velocity()                                               # executem _emit_velocity()
+        if self.running and self.mode == "velocity":
+            self._emit_velocity()
 
-    # -------------------------------------------------------------------------
-
-    def _on_vel_current_slider(self, value):                                    # definim la funció _on_vel_current_slider()
-
-        self.vel_current_value.setText(                                         # executem setText()
+    def _on_vel_current_slider(self, value):
+        self.vel_current_value.setText(
             str(value)
         )
 
-        if self.running and self.mode == "velocity":                            # si self.running and self.mode == "velocity"
-            self._emit_velocity()                                               # executem _emit_velocity()
+        if self.running and self.mode == "velocity":
+            self._emit_velocity()
 
-    # =========================================================================
-    # TORQUE
-    # =========================================================================
-
-    def _on_tor_slider(self, value):                                            # definim la funció _on_tor_slider()
-
-        if value > 0:                                                           # si value > 0
+    def _on_tor_slider(self, value):
+        if value > 0:
             text = f"+{value}"
-        else:                                                                   # en cas contrari
-            text = str(value)                                                   # text ← resultat de str()
+        else:
+            text = str(value)
 
-        self.tor_value.setText(text)                                            # executem setText()
+        self.tor_value.setText(text)
 
-        if self.running and self.mode == "torque":                              # si self.running and self.mode == "torque"
-            self.torqueRequested.emit(value)                                    # executem emit()
+        if self.running and self.mode == "torque":
+            self.torqueRequested.emit(value)
 
-    # =========================================================================
-    # RPM
-    # =========================================================================
+    def _update_rpm_label(self):
+        rpm_sortida = self.slider_vel.value()
 
-    def _update_rpm_label(self):                                                # definim la funció _update_rpm_label()
+        rpm_motor = rpm_sortida * 51.0
 
-        rpm_sortida = self.slider_vel.value()                                   # rpm_sortida ← resultat de value()
-
-        rpm_motor = rpm_sortida * 51.0                                          # assignem rpm_motor
-
-        self.lbl_rpm.setText(                                                   # executem setText()
+        self.lbl_rpm.setText(
             f"{rpm_motor:+.0f} RPM · motor"
         )
 
-    # =========================================================================
-    # MODE
-    # =========================================================================
+    def _set_mode(self, mode):
+        if self.running:
+            self._on_stop()
 
-    def _set_mode(self, mode):                                                  # definim la funció _set_mode()
+        self.mode = mode
 
-        if self.running:                                                        # si self.running
-            self._on_stop()                                                     # executem _on_stop()
-
-        self.mode = mode                                                        # assignem self.mode
-
-        self.vel_panel.setVisible(                                              # executem setVisible()
+        self.vel_panel.setVisible(
             mode == "velocity"
         )
 
-        self.tor_panel.setVisible(                                              # executem setVisible()
+        self.tor_panel.setVisible(
             mode == "torque"
         )
 
-    # =========================================================================
-    # START
-    # =========================================================================
+    def _on_start(self):
+        self.running = True
 
-    def _on_start(self):                                                        # definim la funció _on_start()
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
 
-        self.running = True                                                     # assignem self.running
-
-        self.btn_start.setEnabled(False)                                        # executem setEnabled()
-        self.btn_stop.setEnabled(True)                                          # executem setEnabled()
-
-        if self.mode == "velocity":                                             # si self.mode == "velocity"
-            self._emit_velocity()                                               # executem _emit_velocity()
-        else:                                                                   # en cas contrari
-            self.torqueRequested.emit(                                          # executem emit()
+        if self.mode == "velocity":
+            self._emit_velocity()
+        else:
+            self.torqueRequested.emit(
                 self.slider_tor.value()
             )
 
-    # =========================================================================
-    # STOP
-    # =========================================================================
+    def _on_stop(self):
+        self.set_stopped()
 
-    def _on_stop(self):                                                         # definim la funció _on_stop()
+        self.stopRequested.emit()
 
-        self.set_stopped()                                                      # executem set_stopped()
+    def set_stopped(self):
+        self.running = False
 
-        self.stopRequested.emit()                                               # executem emit()
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
 
-    def set_stopped(self):                                                      # definim la funció set_stopped()
-        """
-        Posa la UI en estat "aturat" SENSE emetre stopRequested.
-        El workspace la fa servir quan ja s'encarrega ell de parar la broca
-        (canvi de mode, STOP general), per no disparar dues parades.
-        """
+        self.slider_vel.blockSignals(True)
+        self.slider_tor.blockSignals(True)
 
-        self.running = False                                                    # assignem self.running
+        self.slider_vel.setValue(0)
+        self.slider_tor.setValue(0)
 
-        self.btn_start.setEnabled(True)                                         # executem setEnabled()
-        self.btn_stop.setEnabled(False)                                         # executem setEnabled()
+        self.slider_vel.blockSignals(False)
+        self.slider_tor.blockSignals(False)
 
-        # Reset sense generar comandes intermèdies
-        self.slider_vel.blockSignals(True)                                      # executem blockSignals()
-        self.slider_tor.blockSignals(True)                                      # executem blockSignals()
+        self.vel_value.setText("0")
+        self.tor_value.setText("0")
 
-        self.slider_vel.setValue(0)                                             # executem setValue()
-        self.slider_tor.setValue(0)                                             # executem setValue()
+        self._update_rpm_label()
 
-        self.slider_vel.blockSignals(False)                                     # executem blockSignals()
-        self.slider_tor.blockSignals(False)                                     # executem blockSignals()
-
-        self.vel_value.setText("0")                                             # executem setText()
-        self.tor_value.setText("0")                                             # executem setText()
-
-        self._update_rpm_label()                                                # executem _update_rpm_label()
-
-    # =========================================================================
-    # EMISSIÓ
-    # =========================================================================
-
-    def _emit_velocity(self):                                                   # definim la funció _emit_velocity()
-
-        self.velocityRequested.emit(                                            # executem emit()
+    def _emit_velocity(self):
+        self.velocityRequested.emit(
             self.slider_vel_current.value(),
             self.slider_vel.value(),
         )
 
-    # =========================================================================
-    # ESTAT
-    # =========================================================================
+    def is_running(self):
+        return self.running
 
-    def is_running(self):                                                       # definim la funció is_running()
-
-        return self.running                                                     # retornem: self.running

@@ -413,7 +413,7 @@ class _DaemonBackend:
         if self._closed.is_set() and self._proc is None:                        # Si ja està tancat, no fer res.
             return
         try:
-            self.send({"cmd": "stop"})                                          # Envia la comanda stop al daemon, que tanca el port/TCP i surt. NO envia RESET: els motors mantenen l'última ordre.
+            self.send({"cmd": "stop"})                                          # Envia la comanda stop al daemon, que tanca el port/TCP i surt. El daemon no envia RESET (en tancar l'app, el RESET el fa abans RobotWorkspace.cleanup).
         except Exception:
             pass
         if self._proc is not None:

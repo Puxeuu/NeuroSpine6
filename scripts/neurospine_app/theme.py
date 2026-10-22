@@ -1,75 +1,49 @@
-"""
-Paleta i estils unificats de tota l'aplicació.
+C_BG_WINDOW   = "#0b0c10"
+C_BG_HEADER   = "#141416"
+C_BG_SIDEBAR  = "#141416"
 
-Basat en l'estètica Apple del viewer_cobot original: fons foscos, accent blau
-iOS, panells amb border-radius generós, tipografia limpia.
+C_PANEL       = "#1c1c1e"
+C_PANEL_ALT   = "#242426"
+C_BORDER      = "#2c2c2e"
+C_BORDER_STRONG = "#3a3a3c"
 
-Qualsevol widget de qualsevol workspace ha d'usar aquesta paleta perquè
-l'app es vegi coherent d'un cap a l'altre.
-"""
+C_TEXT        = "#ffffff"
+C_TEXT_DIM    = "#8e8e93"
+C_TEXT_MUTED  = "#636366"
 
+C_ACCENT      = "#0a84ff"
+C_ACCENT_SOFT = "rgba(10, 132, 255, 0.15)"
+C_ACCENT_LINE = "rgba(10, 132, 255, 0.35)"
 
-# ==============================================================================
-# PALETA
-# ==============================================================================
+C_SAFE        = "#5cb85c"
+C_WARN        = "#f0ad4e"
+C_DANGER      = "#d9534f"
 
-C_BG_WINDOW   = "#0b0c10"       # fons general de la finestra
-C_BG_HEADER   = "#141416"       # fons del header i sidebar
-C_BG_SIDEBAR  = "#141416"                                                       # assignem C_BG_SIDEBAR
+C_AXIS_X      = "#ff453a"
+C_AXIS_Y      = "#30d158"
+C_AXIS_Z      = "#0a84ff"
 
-C_PANEL       = "#1c1c1e"       # fons dels panells laterals
-C_PANEL_ALT   = "#242426"       # panells lleugerament més clars
-C_BORDER      = "#2c2c2e"       # bordes subtils
-C_BORDER_STRONG = "#3a3a3c"     # bordes més marcats
-
-C_TEXT        = "#ffffff"                                                       # assignem C_TEXT
-C_TEXT_DIM    = "#8e8e93"                                                       # assignem C_TEXT_DIM
-C_TEXT_MUTED  = "#636366"                                                       # assignem C_TEXT_MUTED
-
-C_ACCENT      = "#0a84ff"       # blau iOS — accent principal
-C_ACCENT_SOFT = "rgba(10, 132, 255, 0.15)"                                      # assignem C_ACCENT_SOFT
-C_ACCENT_LINE = "rgba(10, 132, 255, 0.35)"                                      # assignem C_ACCENT_LINE
-
-C_SAFE        = "#5cb85c"       # verd (estat OK, safe zones)
-C_WARN        = "#f0ad4e"       # taronja (avisos, pendent)
-C_DANGER      = "#d9534f"       # vermell (perill, col·lisió, e-stop)
-
-# Accents per eixos (compatibilitat amb el viewer_cobot)
-C_AXIS_X      = "#ff453a"       # X → vermell
-C_AXIS_Y      = "#30d158"       # Y → verd
-C_AXIS_Z      = "#0a84ff"       # Z → blau
-
-# Colors per cargols (llista rotatòria)
-CARGOL_COLORS = [                                                               # assignem CARGOL_COLORS
-    "#0a84ff",   # blau
-    "#ff9f0a",   # taronja
-    "#30d158",   # verd
-    "#bf5af2",   # lila
-    "#64d2ff",   # cian
-    "#ff375f",   # magenta
+CARGOL_COLORS = [
+    "#0a84ff",
+    "#ff9f0a",
+    "#30d158",
+    "#bf5af2",
+    "#64d2ff",
+    "#ff375f",
 ]
 
 
-# ==============================================================================
-# TIPOGRAFIA
-# ==============================================================================
+FONT_FAMILY  = "-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+FONT_MONO    = "'SF Mono', 'JetBrains Mono', Consolas, monospace"
 
-FONT_FAMILY  = "-apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"  # assignem FONT_FAMILY
-FONT_MONO    = "'SF Mono', 'JetBrains Mono', Consolas, monospace"               # assignem FONT_MONO
-
-SIZE_XS   = 10                                                                  # assignem SIZE_XS
-SIZE_SM   = 11                                                                  # assignem SIZE_SM
-SIZE_BASE = 13                                                                  # assignem SIZE_BASE
-SIZE_LG   = 15                                                                  # assignem SIZE_LG
-SIZE_XL   = 18                                                                  # assignem SIZE_XL
+SIZE_XS   = 10
+SIZE_SM   = 11
+SIZE_BASE = 13
+SIZE_LG   = 15
+SIZE_XL   = 18
 
 
-# ==============================================================================
-# FULL D'ESTIL GLOBAL
-# ==============================================================================
-
-def global_stylesheet():                                                        # definim la funció global_stylesheet()
-    """Retorna el fulls d'estil aplicat a QApplication."""                      # """Retorna el fulls d'estil aplicat a QApplication."""
+def global_stylesheet():
     return f"""
         /* ============ BASE ============ */
         QMainWindow {{ background-color: {C_BG_WINDOW}; }}
@@ -239,14 +213,9 @@ def global_stylesheet():                                                        
     """
 
 
-# ==============================================================================
-# HELPERS PER ESTILS EN LÍNIA
-# ==============================================================================
-
-def style_pill(color_hex, bg_alpha=0.12, border_alpha=0.3):                     # definim la funció style_pill()
-    """Estil per pastilles d'estat (mando actiu, avisos, etc.)."""              # """Estil per pastilles d'estat (mando actiu, avisos, etc....
-    r, g, b = _hex_to_rgb(color_hex)                                            # r, g, b ← resultat de _hex_to_rgb()
-    return (                                                                    # retornem: (
+def style_pill(color_hex, bg_alpha=0.12, border_alpha=0.3):
+    r, g, b = _hex_to_rgb(color_hex)
+    return (
         f"color: {color_hex}; "
         f"background: rgba({r},{g},{b},{bg_alpha}); "
         f"border: 1px solid rgba({r},{g},{b},{border_alpha}); "
@@ -255,6 +224,7 @@ def style_pill(color_hex, bg_alpha=0.12, border_alpha=0.3):                     
     )
 
 
-def _hex_to_rgb(h):                                                             # definim la funció _hex_to_rgb()
-    h = h.lstrip("#")                                                           # h ← resultat de lstrip()
-    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))                          # retornem: tuple(int(h[i:i+2], 16) for i in (0, ...
+def _hex_to_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
