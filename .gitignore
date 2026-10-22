@@ -1,20 +1,13 @@
-# Entorn de Python (es recrea amb pip)
 venv/
+ALTRES ARXIUS/
+data/pacients/
 __pycache__/
 *.pyc
-
-# macOS
 .DS_Store
-
-# Dades de pacients: grans (~600 MB) i sensibles, no van al repositori
-data/pacients/
-data/intensitats_*.csv
-
-# Preferències locals de cada màquina (ports, pacient actiu)
-data/preferences.json
-
-# Fitxers CAD de SolidWorks (~220 MB, binaris): es guarden fora de git
-solidworks/
-
-# Binari del daemon compilat al Ventuno
-ventuno/motor_daemon
+.vscode/
+*.sldprt
+*.sldasm
+*.slddrw
+*.stl
+*.step
+*.3mf
